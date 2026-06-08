@@ -3,7 +3,7 @@ layout: default
 title: Home
 ---
 
-# Horizon
+# AI CTO Daily
 
 <div id="lang-zh" class="lang-section" markdown="1">
 
@@ -32,7 +32,7 @@ title: Home
 
 <div id="lang-en" class="lang-section" markdown="1">
 
-Welcome to [Horizon](https://github.com/thysrael/Horizon), an AI-driven information aggregation system.
+Welcome to **AI CTO Daily**, a CTO-oriented daily briefing system for AI technology, adapted from Horizon.
 
 ## Documentation
 

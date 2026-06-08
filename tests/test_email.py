@@ -62,7 +62,7 @@ def test_send_daily_summary_uses_smtp_username_when_configured(monkeypatch):
     assert smtp.login_calls == [("resend", "secret")]
     assert len(smtp.messages) == 1
     assert isinstance(smtp.messages[0], MIMEMultipart)
-    assert smtp.messages[0]["From"] == "Horizon Daily <noreply@example.com>"
+    assert smtp.messages[0]["From"] == "AI CTO Daily <noreply@example.com>"
     assert smtp.messages[0]["To"] == "user@example.com"
 
 

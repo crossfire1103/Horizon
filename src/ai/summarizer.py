@@ -19,7 +19,7 @@ def _pangu(text: str) -> str:
 
 LABELS = {
     "en": {
-        "header": "Horizon Daily",
+        "header": "AI CTO Daily",
         "source": "Source",
         "background": "Background",
         "discussion": "Discussion",
@@ -45,7 +45,7 @@ LABELS = {
         ),
     },
     "zh": {
-        "header": "Horizon 每日速递",
+        "header": "AI CTO 日报",
         "source": "来源",
         "background": "背景",
         "discussion": "社区讨论",
@@ -68,7 +68,7 @@ LABELS = {
 
 LABELS["zh"].update(
     {
-        "header": "Horizon 每日速递",
+        "header": "AI CTO 日报",
         "source": "来源",
         "background": "背景",
         "discussion": "社区讨论",
@@ -156,6 +156,8 @@ class DailySummarizer:
             f"# {labels['header']} - {date}\n\n"
             f"> {labels['selected_items'].format(total=total_fetched, selected=len(items))}\n\n"
         )
+        if self.config.disclosure:
+            header += f"> {self.config.disclosure}\n\n"
         if bilingual_note:
             header += f"> {labels['bilingual_note']}\n\n"
 

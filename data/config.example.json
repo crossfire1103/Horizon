@@ -17,7 +17,7 @@
     "imap_server": "imap.qq.com",
     "imap_port": 993,
     "email_address": "xxx@qq.com",
-    "sender_name": "Horizon Daily",
+    "sender_name": "AI CTO Daily",
     "subscribe_keyword": "SUBSCRIBE",
     "unsubscribe_keyword": "UNSUBSCRIBE"
   },
@@ -114,6 +114,7 @@
     "time_window_hours": 24
   },
   "summary": {
+    "disclosure": "由 AI 生成，人类审核。",
     "include_summary": false,
     "include_cto_takeaway": true,
     "max_detailed_items": 6,
@@ -130,6 +131,17 @@
     "root_dir": "data/runs",
     "cache_ai_calls": true,
     "replay_ai_calls": false
+  },
+  "publishing": {
+    "wechat": {
+      "enabled": false,
+      "appid_env": "WECHAT_APP_ID",
+      "secret_env": "WECHAT_APP_SECRET",
+      "author": "AI CTO Daily",
+      "cover_image": "assets/wechat-cover.png",
+      "default_digest": "今日 AI CTO 技术情报速递",
+      "publish_mode": "draft"
+    }
   },
   "webhook": {
     "enabled": false,

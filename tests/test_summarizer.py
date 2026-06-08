@@ -167,8 +167,8 @@ def test_generate_summary_can_append_bilingual_render_without_ai_calls():
     )
 
     assert "本文下方附有中文版。" in result
-    assert "# Horizon Daily - 2026-04-25" in result
-    assert "# Horizon 每日速递 - 2026-04-25" in result
+    assert "# AI CTO Daily - 2026-04-25" in result
+    assert "# AI CTO 日报 - 2026-04-25" in result
     assert "[English Title](https://example.com/items/1)" in result
     assert "[中文标题](https://example.com/items/1)" in result
     assert "English summary." in result
@@ -199,6 +199,29 @@ def test_generate_summary_can_skip_opening_summary_and_keep_cto_takeaway():
     assert "## Summary" not in result
     assert "## CTO Takeaway" in result
     assert "Prioritize rollout governance before broad adoption." in result
+
+
+def test_generate_summary_includes_disclosure():
+    summarizer = DailySummarizer(
+        SummaryConfig(
+            disclosure="由 AI 生成，人类审核。",
+            include_summary=False,
+            include_cto_takeaway=False,
+            include_bilingual=False,
+            show_scores=False,
+        )
+    )
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [_make_item(1)],
+            date="2026-04-25",
+            total_fetched=10,
+            language="en",
+        )
+    )
+
+    assert "> 由 AI 生成，人类审核。" in result
 
 
 def test_generate_summary_uses_localized_ai_cto_takeaway():

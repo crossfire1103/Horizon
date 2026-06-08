@@ -299,6 +299,16 @@ uv run horizon           # Run with default 24h window
 uv run horizon --hours 48  # Fetch from last 48 hours
 ```
 
+#### Local Web Console
+
+This customized version also includes a local Web UI for day-to-day operation:
+
+```bash
+uv run horizon-web
+```
+
+Open `http://127.0.0.1:8765` to run the pipeline, tail run logs, edit and validate `data/config.json`, inspect generated summaries, and browse debug artifacts such as stage outputs and AI calls under `data/runs/`.
+
 #### With Docker
 
 ```bash

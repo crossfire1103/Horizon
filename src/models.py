@@ -303,7 +303,7 @@ class EmailConfig(BaseModel):
     smtp_username: Optional[str] = None
     email_address: str
     password_env: str = "EMAIL_PASSWORD"
-    sender_name: str = "Horizon Daily"
+    sender_name: str = "AI CTO Daily"
     subscribe_keyword: str = "SUBSCRIBE"
     unsubscribe_keyword: str = "UNSUBSCRIBE"
     enabled: bool = False
@@ -319,6 +319,7 @@ class FilteringConfig(BaseModel):
 class SummaryConfig(BaseModel):
     """Markdown report rendering configuration."""
 
+    disclosure: str = "由 AI 生成，人类审核。"
     include_summary: bool = False
     include_cto_takeaway: bool = False
     max_detailed_items: int = 0  # 0 means render every selected item in detail
@@ -340,6 +341,32 @@ class ArtifactConfig(BaseModel):
     replay_ai_calls: bool = False
 
 
+class WeChatPublishingConfig(BaseModel):
+    """WeChat Official Account publishing configuration."""
+
+    enabled: bool = False
+    appid_env: str = "WECHAT_APP_ID"
+    secret_env: str = "WECHAT_APP_SECRET"
+    author: str = "AI CTO Daily"
+    cover_image: str = "assets/wechat-cover.png"
+    default_digest: str = "今日 AI CTO 技术情报速递"
+    publish_mode: str = "draft"
+
+    @field_validator("publish_mode")
+    @classmethod
+    def validate_publish_mode(cls, v: str) -> str:
+        allowed = {"draft"}
+        if v not in allowed:
+            raise ValueError(f"wechat.publish_mode must be one of {allowed}, got '{v}'")
+        return v
+
+
+class PublishingConfig(BaseModel):
+    """Publishing integrations."""
+
+    wechat: WeChatPublishingConfig = Field(default_factory=WeChatPublishingConfig)
+
+
 class Config(BaseModel):
     """Main configuration model."""
 
@@ -349,5 +376,6 @@ class Config(BaseModel):
     filtering: FilteringConfig
     summary: SummaryConfig = Field(default_factory=SummaryConfig)
     artifacts: ArtifactConfig = Field(default_factory=ArtifactConfig)
+    publishing: PublishingConfig = Field(default_factory=PublishingConfig)
     email: Optional[EmailConfig] = None
     webhook: Optional[WebhookConfig] = None
