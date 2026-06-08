@@ -5,6 +5,30 @@ import re
 from typing import Optional
 
 
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+_ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
+
+
+def detect_original_language(text: str) -> str:
+    """Best-effort language label for preserving source-language context.
+
+    This intentionally stays lightweight: it only distinguishes CJK-heavy text
+    from mostly English/Latin text, and returns ``unknown`` for empty content.
+    The label is used as prompt context, not as a hard routing decision.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return "unknown"
+
+    cjk = len(_CJK_RE.findall(stripped))
+    ascii_letters = len(_ASCII_LETTER_RE.findall(stripped))
+    if cjk >= 8 and cjk >= ascii_letters * 0.25:
+        return "zh"
+    if ascii_letters > 0:
+        return "en"
+    return "unknown"
+
+
 def parse_json_response(response: str) -> Optional[dict]:
     """Try multiple strategies to extract a JSON object from an AI response.
 

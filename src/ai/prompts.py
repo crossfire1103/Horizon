@@ -57,6 +57,26 @@ Consider:
 - Relevance to software engineering, AI/ML, and systems research
 - Community discussion quality: insightful comments, diverse viewpoints, and debates increase value
 - Engagement signals: high upvotes/favorites with substantive discussion indicate community-validated importance
+
+Topic guardrails:
+- This radar is AI-focused. Score 7+ only when the item is directly about AI/ML,
+  LLMs, AI agents, model releases, AI infrastructure, AI inference/serving,
+  AI developer tools, AI safety/security, AI product/platform changes, or
+  technical research that directly advances or evaluates AI systems.
+- If an item is not directly AI-related, cap its score at 4 even if it is
+  technically impressive, popular, or has strong community discussion.
+- Generic semiconductors, electronics, biotech/medicine, cybersecurity,
+  cloud/API engineering, developer tooling, funding news, personal essays,
+  broad culture commentary, and generic policy takes should not pass the
+  threshold unless the AI connection is explicit and central.
+- Hardware news can score 7+ only if it is clearly about AI compute, model
+  inference/training, local LLM deployment, GPU/NPU acceleration, or AI data
+  center infrastructure. A faster transistor or general chip advance is not
+  enough by itself.
+- General popularity alone is not enough for a score above 6.
+- For a score of 7 or higher, the item must provide concrete AI-specific value:
+  a meaningful AI development, AI systems insight, AI infrastructure result,
+  model/tool release, or high-signal practitioner/research finding.
 """
 
 CONTENT_ANALYSIS_USER = """Analyze the following content and provide a JSON response with:
@@ -70,6 +90,7 @@ Title: {title}
 Source: {source}
 Author: {author}
 URL: {url}
+Original language: {original_language}
 {content_section}
 {discussion_section}
 
@@ -77,7 +98,7 @@ Respond with valid JSON only:
 {{
   "score": <number>,
   "reason": "<explanation>",
-  "summary": "<one-sentence-summary>",
+  "summary": "<one-sentence-summary in the original language when possible>",
   "tags": ["<tag1>", "<tag2>", ...]
 }}"""
 
@@ -111,6 +132,15 @@ Provide EACH text field in BOTH English and Chinese. Use the following key namin
 - background_en / background_zh
 - community_discussion_en / community_discussion_zh
 
+The renderer depends on this exact bilingual schema. Return one JSON object
+that contains both language versions in the same response; do not return
+separate English and Chinese documents, and do not omit either suffix family.
+
+Preserve source-language fidelity: treat the original title and content as the
+authoritative source of meaning. The one-line summary may already be translated
+or compressed, so use it only as a weak aid. Avoid translating from a previous
+translation when original-language text is available.
+
 Field definitions:
 0. **title** (one short phrase, ≤15 words): A clear, accurate headline for the news item.
 
@@ -142,6 +172,7 @@ CONTENT_ENRICHMENT_USER = """Provide a structured bilingual analysis for the fol
 **News Item:**
 - Title: {title}
 - URL: {url}
+- Original language: {original_language}
 - One-line summary: {summary}
 - Score: {score}/10
 - Reason: {reason}
@@ -169,4 +200,46 @@ Respond with valid JSON only. Each _en field must be in English; each _zh field 
   "community_discussion_en": "<1-3 sentences in English, or empty string>",
   "community_discussion_zh": "<用中文写1-3句话，或空字符串>",
   "sources": ["<url from search results>", "..."]
+}}"""
+
+
+CTO_TAKEAWAY_SYSTEM = """You are a CTO advisor writing executive technical takeaways.
+
+Your audience is a CTO or VP Engineering who cares about enterprise technology
+strategy, architecture, engineering productivity, platform reliability, AI
+infrastructure cost, security/compliance, vendor strategy, team capability, and
+roadmap decisions.
+
+Return one JSON object with both English and Simplified Chinese fields:
+- cto_takeaway_en
+- cto_takeaway_zh
+
+Rules:
+- Do not merely summarize the article.
+- Translate the news into CTO-relevant implications and possible actions.
+- Mention the business/engineering management angle: cost, risk, governance,
+  staffing, architecture, build-vs-buy, vendor/platform strategy, rollout, or
+  evaluation metrics when relevant.
+- If the item is only weakly relevant to a CTO, say what should be monitored
+  rather than recommending immediate action.
+- Keep each field to 1-2 concise sentences.
+- cto_takeaway_en must be English.
+- cto_takeaway_zh must be Simplified Chinese."""
+
+
+CTO_TAKEAWAY_USER = """Generate a CTO-oriented takeaway for this selected news item.
+
+Title: {title}
+URL: {url}
+Source: {source}
+Tags: {tags}
+Score reason: {reason}
+
+Structured article analysis:
+{analysis}
+
+Return valid JSON only:
+{{
+  "cto_takeaway_en": "<1-2 CTO-oriented sentences in English>",
+  "cto_takeaway_zh": "<1-2 句中文 CTO 视角要点>"
 }}"""

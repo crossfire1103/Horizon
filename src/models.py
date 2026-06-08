@@ -316,6 +316,30 @@ class FilteringConfig(BaseModel):
     time_window_hours: int = 24
 
 
+class SummaryConfig(BaseModel):
+    """Markdown report rendering configuration."""
+
+    include_summary: bool = False
+    include_cto_takeaway: bool = False
+    max_detailed_items: int = 0  # 0 means render every selected item in detail
+    show_scores: bool = True
+    compact_remaining: bool = False
+    compact_sentence_limit: int = 2
+    include_bilingual: bool = False
+    bilingual_secondary_language: str = "zh"
+    cto_takeaway_ai_enabled: bool = False
+    cto_takeaway_ai_items: int = 3
+
+
+class ArtifactConfig(BaseModel):
+    """Debug artifact and AI replay configuration."""
+
+    enabled: bool = False
+    root_dir: str = "data/runs"
+    cache_ai_calls: bool = True
+    replay_ai_calls: bool = False
+
+
 class Config(BaseModel):
     """Main configuration model."""
 
@@ -323,5 +347,7 @@ class Config(BaseModel):
     ai: AIConfig
     sources: SourcesConfig
     filtering: FilteringConfig
+    summary: SummaryConfig = Field(default_factory=SummaryConfig)
+    artifacts: ArtifactConfig = Field(default_factory=ArtifactConfig)
     email: Optional[EmailConfig] = None
     webhook: Optional[WebhookConfig] = None

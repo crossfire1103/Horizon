@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from src.ai.summarizer import DailySummarizer
-from src.models import ContentItem, SourceType
+from src.models import ContentItem, SourceType, SummaryConfig
 
 
 def _run_async(coro):
@@ -138,3 +138,89 @@ def test_generate_empty_summary_zh_uses_localized_analyzed_line():
 
     assert "> 已分析 10 条内容，但没有达到重要性阈值的条目。" in result
     assert "Analyzed 10 items" not in result
+
+
+def test_generate_summary_can_append_bilingual_render_without_ai_calls():
+    summarizer = DailySummarizer(
+        SummaryConfig(
+            include_bilingual=True,
+            bilingual_secondary_language="zh",
+            include_summary=True,
+            max_detailed_items=1,
+            compact_remaining=True,
+            show_scores=False,
+        )
+    )
+    item = _make_item(1)
+    item.metadata["title_en"] = "English Title"
+    item.metadata["title_zh"] = "中文标题"
+    item.metadata["detailed_summary_en"] = "English summary."
+    item.metadata["detailed_summary_zh"] = "中文摘要。"
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [item],
+            date="2026-04-25",
+            total_fetched=10,
+            language="en",
+        )
+    )
+
+    assert "本文下方附有中文版。" in result
+    assert "# Horizon Daily - 2026-04-25" in result
+    assert "# Horizon 每日速递 - 2026-04-25" in result
+    assert "[English Title](https://example.com/items/1)" in result
+    assert "[中文标题](https://example.com/items/1)" in result
+    assert "English summary." in result
+    assert "中文摘要。" in result
+
+
+def test_generate_summary_can_skip_opening_summary_and_keep_cto_takeaway():
+    summarizer = DailySummarizer(
+        SummaryConfig(
+            include_summary=False,
+            include_cto_takeaway=True,
+            include_bilingual=False,
+            show_scores=False,
+        )
+    )
+    item = _make_item(1)
+    item.metadata["cto_takeaway_en"] = "Prioritize rollout governance before broad adoption."
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [item],
+            date="2026-04-25",
+            total_fetched=10,
+            language="en",
+        )
+    )
+
+    assert "## Summary" not in result
+    assert "## CTO Takeaway" in result
+    assert "Prioritize rollout governance before broad adoption." in result
+
+
+def test_generate_summary_uses_localized_ai_cto_takeaway():
+    summarizer = DailySummarizer(
+        SummaryConfig(
+            include_summary=False,
+            include_cto_takeaway=True,
+            include_bilingual=False,
+            show_scores=False,
+        )
+    )
+    item = _make_item(1)
+    item.metadata["cto_takeaway_zh"] = "先把治理、成本和试点指标定清楚。"
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [item],
+            date="2026-04-25",
+            total_fetched=10,
+            language="zh",
+        )
+    )
+
+    assert "CTO" in result
+    assert "先把治理、成本和试点指标定清楚。" in result

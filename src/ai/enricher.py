@@ -19,9 +19,11 @@ from .client import AIClient
 from .prompts import (
     CONCEPT_EXTRACTION_SYSTEM, CONCEPT_EXTRACTION_USER,
     CONTENT_ENRICHMENT_SYSTEM, CONTENT_ENRICHMENT_USER,
+    CTO_TAKEAWAY_SYSTEM, CTO_TAKEAWAY_USER,
 )
 from .utils import parse_json_response
 from ..models import ContentItem
+from ..storage.artifacts import ai_trace_context
 
 
 class ContentEnricher:
@@ -66,6 +68,48 @@ class ContentEnricher:
                 _process(item, task) for item in items
             ]
             await asyncio.gather(*coros)
+
+    async def generate_cto_takeaways(self, items: List[ContentItem], max_items: int = 3) -> None:
+        """Generate CTO-oriented takeaways for the top selected items."""
+        target_items = items[: max(0, max_items)]
+        if not target_items:
+            return
+
+        for item in target_items:
+            try:
+                await self._generate_cto_takeaway(item)
+            except Exception as exc:
+                print(f"Error generating CTO takeaway for {item.id}: {exc}")
+
+    async def _generate_cto_takeaway(self, item: ContentItem) -> None:
+        analysis = {
+            "summary_en": item.metadata.get("detailed_summary_en") or item.ai_summary or "",
+            "summary_zh": item.metadata.get("detailed_summary_zh") or "",
+            "background_en": item.metadata.get("background_en") or "",
+            "background_zh": item.metadata.get("background_zh") or "",
+            "discussion_en": item.metadata.get("community_discussion_en") or "",
+            "discussion_zh": item.metadata.get("community_discussion_zh") or "",
+        }
+        user_prompt = CTO_TAKEAWAY_USER.format(
+            title=item.title,
+            url=str(item.url),
+            source=item.source_type.value,
+            tags=", ".join(item.ai_tags or []),
+            reason=item.ai_reason or "",
+            analysis=json.dumps(analysis, ensure_ascii=False, indent=2),
+        )
+        with ai_trace_context(stage="cto_takeaway", item_id=item.id, item_title=item.title):
+            response = await self.client.complete(
+                system=CTO_TAKEAWAY_SYSTEM,
+                user=user_prompt,
+            )
+        result = self._parse_json_response(response)
+        if result is None:
+            return
+        for lang in ("en", "zh"):
+            value = result.get(f"cto_takeaway_{lang}")
+            if value:
+                item.metadata[f"cto_takeaway_{lang}"] = str(value).strip()
 
     async def _web_search(self, query: str, max_results: int = 3) -> list:
         """Search the web for context via DuckDuckGo.
@@ -117,10 +161,11 @@ class ContentEnricher:
         )
 
         try:
-            response = await self.client.complete(
-                system=CONCEPT_EXTRACTION_SYSTEM,
-                user=user_prompt,
-            )
+            with ai_trace_context(stage="concept_extraction", item_id=item.id, item_title=item.title):
+                response = await self.client.complete(
+                    system=CONCEPT_EXTRACTION_SYSTEM,
+                    user=user_prompt,
+                )
             result = self._parse_json_response(response)
             if result is None:
                 return []
@@ -176,6 +221,7 @@ class ContentEnricher:
         user_prompt = CONTENT_ENRICHMENT_USER.format(
             title=item.title,
             url=str(item.url),
+            original_language=item.metadata.get("original_language", "unknown"),
             summary=item.ai_summary or item.title,
             score=item.ai_score or 0,
             reason=item.ai_reason or "",
@@ -185,10 +231,11 @@ class ContentEnricher:
             web_context=web_context or "No web search results available.",
         )
 
-        response = await self.client.complete(
-            system=CONTENT_ENRICHMENT_SYSTEM,
-            user=user_prompt,
-        )
+        with ai_trace_context(stage="enrich", item_id=item.id, item_title=item.title):
+            response = await self.client.complete(
+                system=CONTENT_ENRICHMENT_SYSTEM,
+                user=user_prompt,
+            )
 
         # Parse JSON response with robust fallback
         result = self._parse_json_response(response)
@@ -240,15 +287,16 @@ class ContentEnricher:
         """Lightweight translation fallback: when full enrichment fails, at least
         translate the title and summary to Chinese so the item is not dropped."""
         try:
-            response = await self.client.complete(
-                system="You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text.",
-                user=(
-                    f'Title: {item.title}\n'
-                    f'Summary: {item.ai_summary or item.title}\n\n'
-                    'Return JSON:\n'
-                    '{"title_zh": "<中文标题>", "summary_zh": "<用中文写1-2句摘要>"}'
-                ),
-            )
+            with ai_trace_context(stage="translation_fallback", item_id=item.id, item_title=item.title):
+                response = await self.client.complete(
+                    system="You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text.",
+                    user=(
+                        f'Title: {item.title}\n'
+                        f'Summary: {item.ai_summary or item.title}\n\n'
+                        'Return JSON:\n'
+                        '{"title_zh": "<中文标题>", "summary_zh": "<用中文写1-2句摘要>"}'
+                    ),
+                )
             result = self._parse_json_response(response)
             if result:
                 if result.get("title_zh"):

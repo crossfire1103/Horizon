@@ -4,13 +4,15 @@ import asyncio
 import json
 import re
 from typing import List, Optional
+from tenacity import RetryError
 from tenacity import retry, stop_after_attempt, wait_exponential
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCompleteColumn
 
 from .client import AIClient
 from .prompts import CONTENT_ANALYSIS_SYSTEM, CONTENT_ANALYSIS_USER
-from .utils import parse_json_response
+from .utils import detect_original_language, parse_json_response
 from ..models import ContentItem
+from ..storage.artifacts import ai_trace_context
 
 DEFAULT_THROTTLE_SEC = 0.0
 
@@ -51,7 +53,8 @@ class ContentAnalyzer:
                 try:
                     await self._analyze_item(item)
                 except Exception as e:
-                    print(f"Error analyzing item {item.id}: {e}")
+                    detail = self._format_analysis_error(e)
+                    print(f"Error analyzing item {item.id}: {detail}")
                     item.ai_score = 0.0
                     item.ai_reason = "Analysis failed"
                     item.ai_summary = item.title
@@ -75,6 +78,14 @@ class ContentAnalyzer:
 
         return analyzed_items
 
+    @staticmethod
+    def _format_analysis_error(error: Exception) -> str:
+        if isinstance(error, RetryError):
+            last = error.last_attempt.exception()
+            if last is not None:
+                return f"{type(last).__name__}: {last}"
+        return f"{type(error).__name__}: {error}"
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(min=2, max=10)
@@ -85,6 +96,12 @@ class ContentAnalyzer:
         Args:
             item: Content item to analyze (modified in-place)
         """
+        original_sample = f"{item.title}\n\n{item.content or ''}"
+        item.metadata.setdefault(
+            "original_language",
+            detect_original_language(original_sample[:4000]),
+        )
+
         # Prepare content section
         content_section = ""
         if item.content:
@@ -135,15 +152,17 @@ class ContentAnalyzer:
             source=f"{item.source_type.value}",
             author=item.author or "Unknown",
             url=str(item.url),
+            original_language=item.metadata.get("original_language", "unknown"),
             content_section=content_section,
             discussion_section=discussion_section
         )
 
         # Get AI completion
-        response = await self.client.complete(
-            system=CONTENT_ANALYSIS_SYSTEM,
-            user=user_prompt,
-        )
+        with ai_trace_context(stage="analyze", item_id=item.id, item_title=item.title):
+            response = await self.client.complete(
+                system=CONTENT_ANALYSIS_SYSTEM,
+                user=user_prompt,
+            )
 
         # Parse JSON response with robust fallback
         result = self._parse_json_response(response)

@@ -11,6 +11,7 @@ from google.genai import types
 
 
 from ..models import AIConfig, AIProvider
+from ..storage.artifacts import ArtifactStore
 from .tokens import record_usage
 
 
@@ -203,6 +204,9 @@ class OpenAIClient(AIClient):
         # Some newer models (e.g. Claude Opus 4.7 on Bedrock Converse) reject
         # `temperature`. We learn this on first 400 and stop sending it.
         self._supports_temperature = True
+        # Newer OpenAI reasoning models reject legacy `max_tokens` and require
+        # `max_completion_tokens`. Learn this on first 400 and reuse it.
+        self._use_max_completion_tokens = False
 
     async def complete(
         self,
@@ -236,6 +240,7 @@ class OpenAIClient(AIClient):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 include_temperature=self._supports_temperature,
+                use_max_completion_tokens=self._use_max_completion_tokens,
             )
         except Exception as exc:
             if self._supports_temperature and self._is_temperature_unsupported(
@@ -248,6 +253,19 @@ class OpenAIClient(AIClient):
                     temperature=temperature,
                     max_tokens=max_tokens,
                     include_temperature=False,
+                    use_max_completion_tokens=self._use_max_completion_tokens,
+                )
+            elif not self._use_max_completion_tokens and self._requires_max_completion_tokens(
+                str(exc)
+            ):
+                self._use_max_completion_tokens = True
+                response = await self._do_request(
+                    system=system,
+                    user=user,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    include_temperature=self._supports_temperature,
+                    use_max_completion_tokens=True,
                 )
             else:
                 raise
@@ -268,14 +286,20 @@ class OpenAIClient(AIClient):
         temperature: float,
         max_tokens: int,
         include_temperature: bool,
+        use_max_completion_tokens: bool,
     ):
+        tokens_kwarg = (
+            {"max_completion_tokens": max_tokens}
+            if use_max_completion_tokens
+            else {"max_tokens": max_tokens}
+        )
         request_kwargs = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "max_tokens": max_tokens,
+            **tokens_kwarg,
         }
         if include_temperature:
             request_kwargs["temperature"] = temperature
@@ -291,6 +315,11 @@ class OpenAIClient(AIClient):
             or "not support" in lowered
             or "unsupported" in lowered
         )
+
+    @staticmethod
+    def _requires_max_completion_tokens(message: str) -> bool:
+        lowered = message.lower()
+        return "max_completion_tokens" in lowered and "max_tokens" in lowered
 
 
 class AzureOpenAIClient(AIClient):
@@ -479,6 +508,105 @@ class GeminiClient(AIClient):
             completion = max(0, total - prompt)
             record_usage("gemini", input_tokens=prompt, output_tokens=completion)
         return response.text
+
+
+class TracedAIClient(AIClient):
+    """AI client wrapper that records prompts/responses and can replay cache hits."""
+
+    def __init__(self, inner: AIClient, store: ArtifactStore):
+        self.inner = inner
+        self.store = store
+        self.config = getattr(inner, "config", None)
+
+    async def complete(
+        self,
+        system: str,
+        user: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        config = getattr(self.inner, "config", None)
+        provider = getattr(getattr(config, "provider", None), "value", "unknown")
+        model = getattr(config, "model", "unknown")
+        effective_temperature = (
+            getattr(config, "temperature", None) if temperature is None else temperature
+        )
+        effective_max_tokens = (
+            getattr(config, "max_tokens", None) if max_tokens is None else max_tokens
+        )
+        cache_key = self.store.ai_cache_key(
+            provider=provider,
+            model=model,
+            system=system,
+            user=user,
+            temperature=effective_temperature,
+            max_tokens=effective_max_tokens,
+        )
+
+        cached = self.store.load_ai_cache(cache_key) if self.store.replay_ai_calls else None
+        if cached is not None:
+            self.store.record_ai_call(
+                {
+                    "provider": provider,
+                    "model": model,
+                    "cache_key": cache_key,
+                    "cache_hit": True,
+                    "request": {
+                        "system": system,
+                        "user": user,
+                        "temperature": effective_temperature,
+                        "max_tokens": effective_max_tokens,
+                    },
+                    "response": cached,
+                }
+            )
+            return cached
+
+        try:
+            response = await self.inner.complete(
+                system=system,
+                user=user,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except Exception as exc:
+            self.store.record_ai_call(
+                {
+                    "provider": provider,
+                    "model": model,
+                    "cache_key": cache_key,
+                    "cache_hit": False,
+                    "request": {
+                        "system": system,
+                        "user": user,
+                        "temperature": effective_temperature,
+                        "max_tokens": effective_max_tokens,
+                    },
+                    "error": {
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                    },
+                }
+            )
+            raise
+
+        record = {
+            "provider": provider,
+            "model": model,
+            "cache_key": cache_key,
+            "cache_hit": False,
+            "request": {
+                "system": system,
+                "user": user,
+                "temperature": effective_temperature,
+                "max_tokens": effective_max_tokens,
+            },
+            "response": response,
+        }
+        self.store.record_ai_call(record)
+        if self.store.cache_ai_calls:
+            self.store.save_ai_cache(cache_key, record)
+        return response
 
 
 def create_ai_client(config: AIConfig) -> AIClient:

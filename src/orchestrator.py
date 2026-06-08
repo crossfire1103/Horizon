@@ -20,11 +20,12 @@ from .scrapers.telegram import TelegramScraper
 from .scrapers.twitter import TwitterScraper
 from .scrapers.openbb import OpenBBScraper
 from .scrapers.ossinsight import OSSInsightScraper
-from .ai.client import create_ai_client
+from .ai.client import create_ai_client, TracedAIClient
 from .ai.analyzer import ContentAnalyzer
 from .ai.summarizer import DailySummarizer
 from .ai.enricher import ContentEnricher
 from .ai.tokens import get_usage_snapshot
+from .storage.artifacts import ArtifactStore, ai_trace_context
 
 
 class HorizonOrchestrator:
@@ -46,6 +47,7 @@ class HorizonOrchestrator:
             if config.webhook and config.webhook.enabled
             else None
         )
+        self.artifact_store = ArtifactStore.from_config(config.artifacts)
 
     async def run(self, force_hours: int = None) -> None:
         """Execute the complete workflow.
@@ -73,6 +75,7 @@ class HorizonOrchestrator:
             # 2. Fetch content from all sources
             all_items = await self.fetch_all_sources(since)
             self.console.print(f"📥 Fetched {len(all_items)} items from all sources\n")
+            self._save_stage("fetched", all_items)
 
             if not all_items:
                 self.console.print("[yellow]No new content found. Exiting.[/yellow]")
@@ -80,6 +83,7 @@ class HorizonOrchestrator:
 
             # 3. Merge cross-source duplicates (same URL from different sources)
             merged_items = self.merge_cross_source_duplicates(all_items)
+            self._save_stage("merged", merged_items)
             if len(merged_items) < len(all_items):
                 self.console.print(
                     f"🔗 Merged {len(all_items) - len(merged_items)} cross-source duplicates "
@@ -89,6 +93,7 @@ class HorizonOrchestrator:
             # 4. Analyze with AI
             analyzed_items = await self._analyze_content(merged_items)
             self.console.print(f"🤖 Analyzed {len(analyzed_items)} items with AI\n")
+            self._save_stage("analyzed", analyzed_items)
 
             # 5. Filter by score threshold
             threshold = self.config.filtering.ai_score_threshold
@@ -97,6 +102,7 @@ class HorizonOrchestrator:
                 if item.ai_score and item.ai_score >= threshold
             ]
             important_items.sort(key=lambda x: x.ai_score or 0, reverse=True)
+            self._save_stage("filtered_before_topic_dedup", important_items)
 
             self.console.print(
                 f"⭐️ {len(important_items)} items scored ≥ {threshold}\n"
@@ -110,9 +116,11 @@ class HorizonOrchestrator:
                     f"→ {len(deduped_items)} unique items\n"
                 )
             important_items = deduped_items
+            self._save_stage("filtered", important_items)
 
             # 5.6 Optional second-stage Twitter reply expansion + targeted re-analysis
             await self._expand_twitter_discussion(important_items)
+            self._save_stage("discussion_expanded", important_items)
 
             # Show per-sub-source selection breakdown
             selected_counts: Dict[str, int] = defaultdict(int)
@@ -125,16 +133,19 @@ class HorizonOrchestrator:
 
             # 6. Search related stories + enrich with background knowledge (2nd AI pass)
             await self._enrich_important_items(important_items)
+            await self._generate_cto_takeaways(important_items)
+            self._save_stage("enriched", important_items)
 
             # 7. Generate and save daily summaries for each configured language
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             for lang in self.config.ai.languages:
-                summarizer = DailySummarizer()
+                summarizer = DailySummarizer(self.config.summary)
                 summary = await summarizer.generate_summary(important_items, today, len(all_items), language=lang)
 
                 # Save to data/summaries/
                 summary_path = self.storage.save_daily_summary(today, summary, language=lang)
                 self.console.print(f"💾 Saved {lang.upper()} summary to: {summary_path}\n")
+                self._save_summary_artifact(lang, summary)
 
                 # Copy to docs/ for GitHub Pages
                 try:
@@ -224,6 +235,25 @@ class HorizonOrchestrator:
             hours = self.config.filtering.time_window_hours
             since = datetime.now(timezone.utc) - timedelta(hours=hours)
         return since
+
+    def _create_ai_client(self):
+        client = create_ai_client(self.config.ai)
+        if self.artifact_store:
+            return TracedAIClient(client, self.artifact_store)
+        return client
+
+    def _save_stage(self, stage: str, items: List[ContentItem]) -> None:
+        if not self.artifact_store:
+            return
+        self.artifact_store.save_stage(
+            stage,
+            [item.model_dump(mode="json") for item in items],
+        )
+
+    def _save_summary_artifact(self, language: str, summary: str) -> None:
+        if not self.artifact_store:
+            return
+        self.artifact_store.save_summary(language, summary)
 
     async def fetch_all_sources(self, since: datetime) -> List[ContentItem]:
         """Fetch content from all configured sources.
@@ -418,11 +448,12 @@ class HorizonOrchestrator:
         items_text = "\n\n".join(lines)
 
         try:
-            ai_client = create_ai_client(self.config.ai)
-            response = await ai_client.complete(
-                system=TOPIC_DEDUP_SYSTEM,
-                user=TOPIC_DEDUP_USER.format(items=items_text),
-            )
+            ai_client = self._create_ai_client()
+            with ai_trace_context(stage="topic_dedup", item_count=len(items)):
+                response = await ai_client.complete(
+                    system=TOPIC_DEDUP_SYSTEM,
+                    user=TOPIC_DEDUP_USER.format(items=items_text),
+                )
             result = parse_json_response(response)
             if result is None:
                 self.console.print("[yellow]  dedup: could not parse AI response, skipping[/yellow]")
@@ -510,7 +541,7 @@ class HorizonOrchestrator:
         self.console.print(
             f"   Re-analyzing {len(expanded)} Twitter items with reply context...\n"
         )
-        ai_client = create_ai_client(self.config.ai)
+        ai_client = self._create_ai_client()
         analyzer = ContentAnalyzer(ai_client)
         await analyzer.analyze_batch(expanded)
 
@@ -527,10 +558,26 @@ class HorizonOrchestrator:
             return
 
         self.console.print("📚 Enriching with background knowledge...")
-        ai_client = create_ai_client(self.config.ai)
+        ai_client = self._create_ai_client()
         enricher = ContentEnricher(ai_client)
         await enricher.enrich_batch(items)
         self.console.print(f"   Enriched {len(items)} items\n")
+
+    async def _generate_cto_takeaways(self, items: List[ContentItem]) -> None:
+        """Generate CTO-oriented takeaways for top selected items."""
+        if not items or not self.config.summary.cto_takeaway_ai_enabled:
+            return
+
+        max_items = self.config.summary.cto_takeaway_ai_items
+        if max_items <= 0:
+            return
+
+        target_count = min(max_items, len(items))
+        self.console.print(f"🧭 Generating CTO takeaways for top {target_count} items...")
+        ai_client = self._create_ai_client()
+        enricher = ContentEnricher(ai_client)
+        await enricher.generate_cto_takeaways(items, max_items=max_items)
+        self.console.print(f"   Generated CTO takeaways for {target_count} items\n")
 
     async def _analyze_content(self, items: List[ContentItem]) -> List[ContentItem]:
         """Analyze content items with AI.
@@ -543,7 +590,7 @@ class HorizonOrchestrator:
         """
         self.console.print("🤖 Analyzing content with AI...")
 
-        ai_client = create_ai_client(self.config.ai)
+        ai_client = self._create_ai_client()
         analyzer = ContentAnalyzer(ai_client)
 
         return await analyzer.analyze_batch(items)
@@ -568,6 +615,6 @@ class HorizonOrchestrator:
         """
         self.console.print("📝 Generating daily summary...")
 
-        summarizer = DailySummarizer()
+        summarizer = DailySummarizer(self.config.summary)
 
         return await summarizer.generate_summary(items, date, total_fetched, language=language)

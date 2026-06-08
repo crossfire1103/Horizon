@@ -113,6 +113,24 @@
     "ai_score_threshold": 6.0,
     "time_window_hours": 24
   },
+  "summary": {
+    "include_summary": false,
+    "include_cto_takeaway": true,
+    "max_detailed_items": 6,
+    "show_scores": false,
+    "compact_remaining": true,
+    "compact_sentence_limit": 2,
+    "include_bilingual": true,
+    "bilingual_secondary_language": "zh",
+    "cto_takeaway_ai_enabled": false,
+    "cto_takeaway_ai_items": 3
+  },
+  "artifacts": {
+    "enabled": false,
+    "root_dir": "data/runs",
+    "cache_ai_calls": true,
+    "replay_ai_calls": false
+  },
   "webhook": {
     "enabled": false,
     "url_env": "HORIZON_WEBHOOK_URL",
