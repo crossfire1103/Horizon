@@ -28,6 +28,19 @@
 
 </div>
 
+## Customized Version
+
+This repository is my customized version of Horizon, adjusted for a more focused AI/CTO daily briefing workflow. Compared with the upstream project, this version is tuned to:
+
+- Keep the radar stricter on AI-related topics and filter out generic tech news more aggressively.
+- Generate one bilingual report, with the Chinese version appended below the English version.
+- Replace the generic opening summary with CTO-oriented takeaways for the top stories.
+- Run an extra AI pass for selected top stories so the CTO takeaways discuss engineering strategy, architecture, cost, governance, vendor choices, rollout risk, and team impact.
+- Store run artifacts, stage outputs, prompts, responses, and optional AI call cache under `data/runs/` for debugging and token-saving experiments.
+- Preserve source-language context before enrichment to reduce meaning loss from repeated translation.
+
+The original Horizon project remains the foundation; this fork is shaped around my own source mix, reading preferences, and CTO-focused AI news workflow.
+
 ## Screenshots
 
 <table>
