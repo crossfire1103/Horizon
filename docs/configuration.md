@@ -493,6 +493,29 @@ Resend SMTP example:
 
 Set `RESEND_API_KEY` in `.env`. Recipients are loaded from `data/subscribers.json`.
 
+## WeChat Review Reminder
+
+For personal WeChat Official Accounts that cannot use the publish API, keep `publish_mode` as `draft` and enable a review reminder. The reminder is sent after a successful pipeline run, including scheduler runs, and uses the SMTP settings from `email`.
+
+```json
+{
+  "publishing": {
+    "wechat": {
+      "enabled": true,
+      "publish_mode": "draft",
+      "review_reminder_enabled": true,
+      "review_reminder_recipients": ["owner@example.com"],
+      "review_reminder_subject": "AI CTO Daily is ready for WeChat review",
+      "review_url": "http://192.168.50.2:8765"
+    }
+  }
+}
+```
+
+- `review_reminder_enabled`: Sends a review email after the daily summary files are generated.
+- `review_reminder_recipients`: Explicit reminder recipients. If empty, AI CTO Daily sends the reminder to `email.email_address`.
+- `review_url`: Web console URL shown in the reminder email. For a Synology deployment, use the NAS address such as `http://192.168.50.2:8765`.
+
 ## Webhook Notification
 
 Webhook notification is optional and disabled unless `webhook.enabled` is `true`. AI CTO Daily can call Feishu/Lark, DingTalk, Slack, Discord, or any custom webhook endpoint when the pipeline succeeds or fails.

@@ -79,6 +79,32 @@ def test_send_daily_summary_falls_back_to_email_address_for_smtp_login(monkeypat
     assert FakeSMTP.instances[0].login_calls == [("noreply@example.com", "secret")]
 
 
+def test_send_plain_email_uses_explicit_recipients(monkeypatch):
+    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
+    monkeypatch.setattr("src.services.email.smtplib.SMTP_SSL", FakeSMTP)
+    FakeSMTP.instances = []
+
+    config = _email_config(smtp_username="resend")
+    manager = EmailManager(config)
+
+    manager.send_plain_email(
+        "Ready for review",
+        "Open the console and review the WeChat draft.",
+        ["owner@example.com"],
+    )
+
+    smtp = FakeSMTP.instances[0]
+    assert smtp.login_calls == [("resend", "secret")]
+    assert len(smtp.messages) == 1
+    assert smtp.messages[0]["Subject"] == "Ready for review"
+    assert smtp.messages[0]["From"] == "AI CTO Daily <noreply@example.com>"
+    assert smtp.messages[0]["To"] == "owner@example.com"
+    assert (
+        smtp.messages[0].get_payload(decode=True).decode()
+        == "Open the console and review the WeChat draft."
+    )
+
+
 def test_send_daily_summary_escapes_raw_html(monkeypatch):
     monkeypatch.setenv("EMAIL_PASSWORD", "secret")
     monkeypatch.setattr("src.services.email.smtplib.SMTP_SSL", FakeSMTP)

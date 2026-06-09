@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
 from src.models import RSSSourceConfig
-from src.scrapers.rss import RSSScraper
+from src.scrapers.rss import RSS_REQUEST_HEADERS, RSSScraper
 
 
 def test_rss_ids_are_deterministic() -> None:
@@ -35,3 +35,19 @@ def test_rss_ids_are_deterministic() -> None:
 
     assert first == second
     assert first == "rss:example.com_feed.xml:5e2d5d1e58e94d76"
+
+
+def test_rss_fetch_uses_browser_like_headers() -> None:
+    response = MagicMock()
+    response.text = "<?xml version='1.0'?><rss><channel></channel></rss>"
+    response.raise_for_status.return_value = None
+    client = AsyncMock()
+    client.get.return_value = response
+    source = RSSSourceConfig(name="Test", url="https://example.com/feed.xml")
+    scraper = RSSScraper([source], client)
+
+    asyncio.run(scraper.fetch(datetime(2026, 4, 24, 0, 0, tzinfo=timezone.utc)))
+
+    _, kwargs = client.get.call_args
+    assert kwargs["headers"] == RSS_REQUEST_HEADERS
+    assert "Mozilla/5.0" in kwargs["headers"]["User-Agent"]

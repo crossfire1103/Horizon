@@ -96,8 +96,8 @@ class EmailManager:
                                         subscribers = storage_manager.load_subscribers()
                                         self._send_reply(
                                             email_addr,
-                                            "Subscribed to Horizon",
-                                            "You have been successfully subscribed to Horizon daily summaries.",
+                                            "Subscribed to AI CTO Daily",
+                                            "You have been successfully subscribed to AI CTO Daily summaries.",
                                         )
                                         logger.info(f"Added subscriber: {email_addr}")
                                     else:
@@ -138,8 +138,8 @@ class EmailManager:
                                         subscribers = storage_manager.load_subscribers()
                                         self._send_reply(
                                             email_addr,
-                                            "Unsubscribed from Horizon",
-                                            "You have been successfully unsubscribed from Horizon daily summaries.",
+                                            "Unsubscribed from AI CTO Daily",
+                                            "You have been successfully unsubscribed from AI CTO Daily summaries.",
                                         )
                                         logger.info(f"Removed subscriber: {email_addr}")
                                     else:
@@ -215,6 +215,37 @@ class EmailManager:
                         logger.info(f"Sent summary to {subscriber}")
                     except Exception as e:
                         logger.error(f"Failed to send to {subscriber}: {e}")
+
+        except Exception as e:
+            logger.error(f"SMTP Error: {e}")
+
+    def send_plain_email(self, subject: str, body: str, recipients: List[str]):
+        """Sends a plain-text email to explicit recipients."""
+        recipients = [recipient for recipient in recipients if recipient]
+        if not self.config.enabled or not recipients:
+            return
+
+        try:
+            with smtplib.SMTP_SSL(
+                self.config.smtp_server, self.config.smtp_port
+            ) as server:
+                server.login(
+                    self.config.smtp_username or self.config.email_address, self.pwd
+                )
+
+                for recipient in recipients:
+                    msg = MIMEText(body, "plain", "utf-8")
+                    msg["Subject"] = subject
+                    msg["From"] = (
+                        f"{self.config.sender_name} <{self.config.email_address}>"
+                    )
+                    msg["To"] = recipient
+
+                    try:
+                        server.send_message(msg)
+                        logger.info(f"Sent email to {recipient}")
+                    except Exception as e:
+                        logger.error(f"Failed to send to {recipient}: {e}")
 
         except Exception as e:
             logger.error(f"SMTP Error: {e}")

@@ -331,6 +331,8 @@ uv run ai-cto-daily-scheduler
 
 The Web console also includes a Schedule page. When `schedule.enabled` is `true`, `uv run ai-cto-daily-web` auto-starts the scheduler.
 
+If direct WeChat publishing is unavailable, enable `publishing.wechat.review_reminder_enabled` and SMTP email. Each successful scheduled run can then email you a review link before you publish manually.
+
 #### With Docker
 
 ```bash

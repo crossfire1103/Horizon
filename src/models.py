@@ -395,6 +395,10 @@ class WeChatPublishingConfig(BaseModel):
     cover_image: str = "assets/wechat-cover.png"
     default_digest: str = "今日 AI CTO 技术情报速递"
     publish_mode: str = "draft"
+    review_reminder_enabled: bool = False
+    review_reminder_recipients: List[str] = Field(default_factory=list)
+    review_reminder_subject: str = "AI CTO Daily is ready for WeChat review"
+    review_url: str = "http://127.0.0.1:8765"
 
     @field_validator("publish_mode")
     @classmethod

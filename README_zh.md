@@ -320,6 +320,8 @@ uv run ai-cto-daily-scheduler
 
 Web Console 也提供 Schedule 页面。`schedule.enabled` 为 `true` 时，`uv run ai-cto-daily-web` 启动后会自动启动 scheduler。
 
+如果微信公众号无法使用直接发布 API，可以开启 `publishing.wechat.review_reminder_enabled` 并配置 SMTP 邮件。每次定时任务成功跑完后，系统会给你发送审核提醒和 Web Console 链接，方便手动发布。
+
 
 
 #### 使用 Docker

@@ -3,7 +3,8 @@
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict
+from pathlib import Path
+from typing import List, Dict, Tuple
 from urllib.parse import urlparse
 import httpx
 from rich.console import Console
@@ -138,19 +139,19 @@ class AICTODailyOrchestrator:
 
             # 7. Generate and save daily summaries for each configured language
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            summary_paths: List[Tuple[str, Path]] = []
             for lang in self.config.ai.languages:
                 summarizer = DailySummarizer(self.config.summary)
                 summary = await summarizer.generate_summary(important_items, today, len(all_items), language=lang)
 
                 # Save to data/summaries/
                 summary_path = self.storage.save_daily_summary(today, summary, language=lang)
+                summary_paths.append((lang, summary_path))
                 self.console.print(f"💾 Saved {lang.upper()} summary to: {summary_path}\n")
                 self._save_summary_artifact(lang, summary)
 
                 # Copy to docs/ for GitHub Pages
                 try:
-                    from pathlib import Path
-
                     post_filename = f"{today}-summary-{lang}.md"
                     posts_dir = Path("docs/_posts")
                     posts_dir.mkdir(parents=True, exist_ok=True)
@@ -200,6 +201,13 @@ class AICTODailyOrchestrator:
                         summarizer=summarizer,
                     )
 
+            self._send_wechat_review_reminder(
+                date=today,
+                summary_paths=summary_paths,
+                important_count=len(important_items),
+                all_items_count=len(all_items),
+            )
+
             self.console.print("[bold green]AI CTO Daily completed successfully![/bold green]")
             usage = get_usage_snapshot()
             if usage.total_tokens > 0:
@@ -227,6 +235,48 @@ class AICTODailyOrchestrator:
                 )
 
             raise
+
+    def _send_wechat_review_reminder(
+        self,
+        date: str,
+        summary_paths: List[Tuple[str, Path]],
+        important_count: int,
+        all_items_count: int,
+    ) -> None:
+        wechat_config = self.config.publishing.wechat
+        if not wechat_config.review_reminder_enabled:
+            return
+
+        if not self.email_manager or not self.config.email or not self.config.email.enabled:
+            self.console.print(
+                "[yellow]WeChat review reminder is enabled, but email is not enabled.[/yellow]"
+            )
+            return
+
+        recipients = (
+            wechat_config.review_reminder_recipients
+            or [self.config.email.email_address]
+        )
+        summaries = "\n".join(
+            f"- {lang.upper()}: {path}" for lang, path in summary_paths
+        ) or "- No summary file was generated."
+        body = (
+            f"AI CTO Daily for {date} is ready for WeChat review.\n\n"
+            f"Selected {important_count} important items from {all_items_count} fetched items.\n"
+            f"WeChat mode in config: {wechat_config.publish_mode}\n\n"
+            f"Open the Web console to preview or create a WeChat draft:\n"
+            f"{wechat_config.review_url}\n\n"
+            f"Generated summaries:\n{summaries}\n\n"
+            "Direct WeChat publishing may be unavailable for personal Official Accounts. "
+            "Please review the content and publish it manually in the WeChat Official Account backend."
+        )
+
+        self.console.print("Sending WeChat review reminder email...")
+        self.email_manager.send_plain_email(
+            wechat_config.review_reminder_subject,
+            body,
+            recipients,
+        )
 
     def _determine_time_window(self, force_hours: int = None) -> datetime:
         if force_hours:
@@ -618,4 +668,3 @@ class AICTODailyOrchestrator:
         summarizer = DailySummarizer(self.config.summary)
 
         return await summarizer.generate_summary(items, date, total_fetched, language=language)
-

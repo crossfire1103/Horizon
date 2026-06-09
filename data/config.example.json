@@ -166,7 +166,11 @@
       "author": "AI CTO Daily",
       "cover_image": "assets/wechat-cover.png",
       "default_digest": "今日 AI CTO 技术情报速递",
-      "publish_mode": "draft"
+      "publish_mode": "draft",
+      "review_reminder_enabled": false,
+      "review_reminder_recipients": [],
+      "review_reminder_subject": "AI CTO Daily is ready for WeChat review",
+      "review_url": "http://127.0.0.1:8765"
     }
   },
   "webhook": {
