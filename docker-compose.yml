@@ -1,13 +1,15 @@
 services:
-  horizon:
+  app:
     build: .
-    container_name: horizon
+    container_name: ai-cto-daily
+    ports:
+      - "8765:8765"
     volumes:
       - ./data:/app/data
+      - ./assets:/app/assets
       - ./.env:/app/.env:ro
     environment:
-      - TZ=UTC
+      - TZ=Asia/Shanghai
     restart: unless-stopped
-    # Run daily at 8:00 AM UTC (adjust as needed)
-    # For one-time run, use: docker compose run --rm horizon
-    command: ["--hours", "24"]
+    # The web service auto-starts the built-in scheduler when
+    # data/config.json has schedule.enabled=true.

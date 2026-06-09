@@ -22,6 +22,6 @@ VOLUME ["/app/data"]
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run the application
-ENTRYPOINT ["uv", "run", "horizon"]
-CMD []
+# Run the local web service by default.
+ENTRYPOINT ["uv", "run"]
+CMD ["ai-cto-daily-web", "--host", "0.0.0.0", "--port", "8765"]

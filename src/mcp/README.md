@@ -35,7 +35,7 @@ The MCP layer does not reimplement Horizon business logic. It reuses the existin
 
 ```bash
 uv sync
-uv run horizon-mcp
+uv run ai-cto-daily-mcp
 ```
 
 The server runs over stdio and is intended to be launched by an MCP client.

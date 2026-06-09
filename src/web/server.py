@@ -35,6 +35,7 @@ from ..publishers.wechat_renderer import (
     markdown_to_wechat_html,
 )
 from ..storage.manager import ConfigError, StorageManager, _expand_env_vars
+from ..services.scheduler import PipelineScheduler, start_blocking_cli_job
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +61,8 @@ class WebJob:
 
 JOBS: dict[str, WebJob] = {}
 JOBS_LOCK = threading.Lock()
+SCHEDULER_LOCK = threading.Lock()
+SCHEDULER: PipelineScheduler | None = None
 
 
 def _utc_now() -> str:
@@ -75,7 +78,7 @@ def _json_default(value: Any) -> Any:
 def _load_config_raw() -> str:
     if not CONFIG_PATH.exists():
         return "{}\n"
-    return CONFIG_PATH.read_text(encoding="utf-8")
+    return CONFIG_PATH.read_text(encoding="utf-8-sig")
 
 
 def _parse_config_text(text: str) -> dict[str, Any]:
@@ -102,7 +105,7 @@ def _save_config_text(text: str) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         backup_path = CONFIG_PATH.with_suffix(".json.bak")
-        backup_path.write_text(CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        backup_path.write_text(CONFIG_PATH.read_text(encoding="utf-8-sig"), encoding="utf-8")
     CONFIG_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return CONFIG_PATH
 
@@ -185,6 +188,26 @@ def _load_config_model() -> Config:
     return storage.load_config()
 
 
+def _load_schedule_config():
+    return _load_config_model().schedule
+
+
+def _get_scheduler() -> PipelineScheduler:
+    global SCHEDULER
+    with SCHEDULER_LOCK:
+        if SCHEDULER is None:
+            SCHEDULER = PipelineScheduler(
+                _load_schedule_config,
+                start_blocking_cli_job,
+                poll_seconds=10.0,
+            )
+        return SCHEDULER
+
+
+def _scheduler_status() -> dict[str, Any]:
+    return _get_scheduler().status()
+
+
 def _read_summary_by_name(name: str) -> str:
     file_path = _safe_child(SUMMARIES_DIR, name)
     if not file_path.exists() or file_path.suffix.lower() != ".md":
@@ -210,9 +233,9 @@ def _wechat_status() -> dict[str, Any]:
         "cover_image": wc.cover_image,
         "cover_exists": cover_path.exists(),
         "cover_size": cover_path.stat().st_size if cover_path.exists() else None,
-        "default_digest": wc.default_digest,
-        "publish_mode": wc.publish_mode,
-    }
+            "default_digest": wc.default_digest,
+            "publish_mode": wc.publish_mode,
+        }
 
 
 def _validate_runtime() -> dict[str, Any]:
@@ -292,7 +315,7 @@ def _start_cli_job(hours: int | None) -> dict[str, Any]:
     return _job_payload(job)
 
 
-class HorizonWebHandler(BaseHTTPRequestHandler):
+class AICTODailyWebHandler(BaseHTTPRequestHandler):
     server_version = "AICTODailyWeb/0.1"
 
     def do_GET(self) -> None:  # noqa: N802
@@ -317,6 +340,8 @@ class HorizonWebHandler(BaseHTTPRequestHandler):
                 self._send_json({"items": _list_artifact_runs()})
             elif path == "/api/publish/wechat/status":
                 self._send_json(_wechat_status())
+            elif path == "/api/schedule/status":
+                self._send_json(_scheduler_status())
             elif path.startswith("/api/artifact-runs/"):
                 self._artifact_route(path)
             elif path == "/api/jobs":
@@ -356,10 +381,28 @@ class HorizonWebHandler(BaseHTTPRequestHandler):
                 if hours_int is not None and hours_int <= 0:
                     raise ValueError("hours must be positive")
                 self._send_json(_start_cli_job(hours_int), status=HTTPStatus.ACCEPTED)
+            elif parsed.path == "/api/schedule/start":
+                _get_scheduler().start()
+                self._send_json(_scheduler_status())
+            elif parsed.path == "/api/schedule/stop":
+                _get_scheduler().stop()
+                self._send_json(_scheduler_status())
+            elif parsed.path == "/api/schedule/run-now":
+                hours = payload.get("hours")
+                hours_int = int(hours) if hours not in (None, "", 0) else None
+                if hours_int is not None and hours_int <= 0:
+                    raise ValueError("hours must be positive")
+                scheduler = _get_scheduler()
+                thread = threading.Thread(
+                    target=lambda: scheduler.trigger_now(hours_int),
+                    daemon=True,
+                )
+                thread.start()
+                self._send_json({"ok": True, "message": "Scheduled run started."}, status=HTTPStatus.ACCEPTED)
             elif parsed.path == "/api/publish/wechat/preview":
                 self._wechat_preview(payload)
-            elif parsed.path == "/api/publish/wechat/draft":
-                result = asyncio.run(self._wechat_publish_draft(payload))
+            elif parsed.path in {"/api/publish/wechat/draft", "/api/publish/wechat/submit"}:
+                result = asyncio.run(self._wechat_publish(payload))
                 self._send_json(result)
             else:
                 self._send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -379,6 +422,7 @@ class HorizonWebHandler(BaseHTTPRequestHandler):
             "root": str(ROOT),
             "config_path": str(CONFIG_PATH),
             "validation": validation,
+            "schedule": _scheduler_status(),
             "jobs": jobs[:10],
             "summaries": _list_summaries()[:8],
             "artifact_runs": _list_artifact_runs()[:8],
@@ -408,7 +452,7 @@ class HorizonWebHandler(BaseHTTPRequestHandler):
             }
         )
 
-    async def _wechat_publish_draft(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _wechat_publish(self, payload: dict[str, Any]) -> dict[str, Any]:
         config = _load_config_model()
         wc = config.publishing.wechat
         if not wc.enabled:
@@ -421,8 +465,12 @@ class HorizonWebHandler(BaseHTTPRequestHandler):
         if not markdown_text:
             raise ValueError("summary_name or text is required")
 
+        mode = str(payload.get("mode") or wc.publish_mode).strip() or "draft"
+        if mode not in {"draft", "publish"}:
+            raise ValueError("mode must be draft or publish")
+
         async with WeChatPublisher(wc, root_dir=ROOT) as publisher:
-            result = await publisher.publish_markdown_draft(
+            result = await publisher.publish_markdown(
                 markdown_text,
                 title=str(payload.get("title") or "").strip() or None,
                 digest=str(payload.get("digest") or "").strip() or None,
@@ -430,10 +478,13 @@ class HorizonWebHandler(BaseHTTPRequestHandler):
                 cover_image=str(payload.get("cover_image") or "").strip() or None,
                 content_source_url=str(payload.get("content_source_url") or "").strip() or None,
                 record_dir=WECHAT_RECORDS_DIR,
+                mode=mode,
             )
         return {
             "ok": True,
+            "mode": result.mode,
             "media_id": result.media_id,
+            "publish_id": result.publish_id,
             "title": result.title,
             "digest": result.digest,
             "thumb_media_id": result.thumb_media_id,
@@ -581,6 +632,7 @@ INDEX_HTML = r"""<!doctype html>
     <nav>
       <button class="active" data-tab="dashboard">Overview</button>
       <button data-tab="run">Run</button>
+      <button data-tab="schedule">Schedule</button>
       <button data-tab="logs">Logs</button>
       <button data-tab="config">Config</button>
       <button data-tab="summaries">Summaries</button>
@@ -603,7 +655,20 @@ INDEX_HTML = r"""<!doctype html>
             <button class="primary" onclick="startRun()">Start Run</button>
             <button class="secondary" onclick="refreshAll()">Refresh</button>
           </div>
-          <p class="muted">Runs the same entry point as `uv run horizon --hours N`, with stdout/stderr captured to a log file.</p>
+          <p class="muted">Runs the same entry point as `uv run ai-cto-daily --hours N`, with stdout/stderr captured to a log file.</p>
+        </div>
+      </section>
+      <section id="schedule">
+        <div class="panel">
+          <h2>Scheduler</h2>
+          <div id="scheduleStatus" class="list">Loading...</div>
+          <div class="row" style="margin-top:12px">
+            <div style="width:180px"><label>Run-now Hours</label><input id="scheduleRunHours" type="number" min="1" value="30" /></div>
+            <button class="primary" onclick="startScheduler()">Start Scheduler</button>
+            <button class="secondary" onclick="stopScheduler()">Stop Scheduler</button>
+            <button class="secondary" onclick="runScheduleNow()">Run Now</button>
+          </div>
+          <p class="muted">Edit the schedule block in Config, save it, then start the scheduler. The standalone service command is `uv run ai-cto-daily-scheduler`.</p>
         </div>
       </section>
       <section id="logs">
@@ -647,6 +712,11 @@ INDEX_HTML = r"""<!doctype html>
           <div class="panel">
             <h2>WeChat Draft</h2>
             <p id="wechatStatus" class="muted">Loading...</p>
+            <label>Mode</label>
+            <select id="wechatMode">
+              <option value="draft">Draft only</option>
+              <option value="publish">Publish now</option>
+            </select>
             <label>Summary</label>
             <select id="wechatSummary"></select>
             <label>Title</label>
@@ -661,7 +731,7 @@ INDEX_HTML = r"""<!doctype html>
             <input id="wechatSourceUrl" placeholder="https://..." />
             <div class="row" style="margin-top:12px">
               <button class="secondary" onclick="previewWeChat()">Preview</button>
-              <button class="primary" onclick="publishWeChatDraft()">Create Draft</button>
+              <button class="primary" onclick="submitWeChat()">Submit</button>
             </div>
             <p id="wechatMessage" class="muted"></p>
           </div>
@@ -704,6 +774,7 @@ INDEX_HTML = r"""<!doctype html>
       renderSummaries(s.summaries || []);
       renderArtifacts(s.artifact_runs || []);
       renderWeChatSummaries(s.summaries || []);
+      renderSchedule(s.schedule || {});
       refreshWeChatStatus();
     }
     function renderMini(id, items) {
@@ -725,6 +796,36 @@ INDEX_HTML = r"""<!doctype html>
       pollLog();
     }
     async function selectJob(id) { selectedJob = id; await pollLog(); }
+    function renderSchedule(s) {
+      const cfg = s.config || {};
+      $('scheduleStatus').innerHTML = `
+        <div class="item">
+          <div class="item-title">${s.service_running ? 'Service running' : 'Service stopped'}</div>
+          <div class="${s.enabled ? 'ok' : 'muted'}">Config: ${s.enabled ? 'enabled' : 'disabled'}</div>
+          <div class="muted">Timezone: ${esc(cfg.timezone || '')}</div>
+          <div class="muted">Daily times: ${esc((cfg.daily_times || []).join(', '))}</div>
+          <div class="muted">Interval minutes: ${esc(cfg.interval_minutes ?? '')}</div>
+          <div class="muted">Pipeline hours: ${esc(cfg.hours ?? '')}</div>
+          <div class="muted">Next run: ${esc(s.next_run_at || 'not scheduled')}</div>
+          <div class="muted">Last job: ${esc(s.last_job_id || '')}</div>
+          <div class="muted">Last log: ${esc((s.last_job || {}).log_path || '')}</div>
+          ${s.last_error ? `<div class="bad">${esc(s.last_error)}</div>` : ''}
+        </div>
+      `;
+    }
+    async function startScheduler() {
+      await api('/api/schedule/start', {method:'POST', body:JSON.stringify({})});
+      await refreshAll();
+    }
+    async function stopScheduler() {
+      await api('/api/schedule/stop', {method:'POST', body:JSON.stringify({})});
+      await refreshAll();
+    }
+    async function runScheduleNow() {
+      const hours = Number($('scheduleRunHours').value || 30);
+      await api('/api/schedule/run-now', {method:'POST', body:JSON.stringify({hours})});
+      await refreshAll();
+    }
     async function pollLog() {
       if (!selectedJob) return;
       const data = await api(`/api/jobs/${selectedJob}/log?tail=80000`);
@@ -774,6 +875,10 @@ INDEX_HTML = r"""<!doctype html>
         `;
         if (!$('wechatAuthor').value) $('wechatAuthor').value = s.author || '';
         if (!$('wechatCover').value) $('wechatCover').value = s.cover_image || '';
+        if (!$('wechatMode').dataset.loaded) {
+          $('wechatMode').value = s.publish_mode || 'draft';
+          $('wechatMode').dataset.loaded = '1';
+        }
       } catch(e) {
         $('wechatStatus').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
       }
@@ -797,10 +902,13 @@ INDEX_HTML = r"""<!doctype html>
         $('wechatMessage').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
       }
     }
-    async function publishWeChatDraft() {
-      if (!confirm('Create a WeChat draft now?')) return;
+    async function submitWeChat() {
+      const mode = $('wechatMode').value || 'draft';
+      const actionText = mode === 'publish' ? 'publish this article now' : 'create a WeChat draft';
+      if (!confirm(`Really ${actionText}?`)) return;
       try {
         const payload = {
+          mode,
           summary_name: $('wechatSummary').value,
           title: $('wechatTitle').value,
           digest: $('wechatDigest').value,
@@ -808,9 +916,12 @@ INDEX_HTML = r"""<!doctype html>
           cover_image: $('wechatCover').value,
           content_source_url: $('wechatSourceUrl').value
         };
-        $('wechatMessage').textContent = 'Publishing to WeChat draft box...';
-        const data = await api('/api/publish/wechat/draft', {method:'POST', body:JSON.stringify(payload)});
-        $('wechatMessage').innerHTML = `<span class="ok">Draft created.</span> media_id: ${esc(data.media_id)}<br>record: ${esc(data.record_path)}`;
+        $('wechatMessage').textContent = mode === 'publish'
+          ? 'Creating draft and submitting to WeChat publishing...'
+          : 'Publishing to WeChat draft box...';
+        const data = await api('/api/publish/wechat/submit', {method:'POST', body:JSON.stringify(payload)});
+        const done = data.mode === 'publish' ? 'Publish submitted.' : 'Draft created.';
+        $('wechatMessage').innerHTML = `<span class="ok">${done}</span> media_id: ${esc(data.media_id)}${data.publish_id ? `<br>publish_id: ${esc(data.publish_id)}` : ''}<br>record: ${esc(data.record_path)}`;
       } catch(e) {
         $('wechatMessage').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
       }
@@ -863,20 +974,35 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AI CTO Daily local web console")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--no-scheduler",
+        action="store_true",
+        help="Do not auto-start the scheduler even when schedule.enabled is true.",
+    )
     args = parser.parse_args()
 
     os.chdir(ROOT)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     load_dotenv(ROOT / ".env", override=False)
 
-    server = ThreadingHTTPServer((args.host, args.port), HorizonWebHandler)
+    server = ThreadingHTTPServer((args.host, args.port), AICTODailyWebHandler)
     url = f"http://{args.host}:{args.port}"
     print(f"AI CTO Daily web console running at {url}")
+    if not args.no_scheduler:
+        try:
+            scheduler = _get_scheduler()
+            if _load_schedule_config().enabled:
+                scheduler.start()
+                print("AI CTO Daily scheduler auto-started from config.")
+        except Exception as exc:
+            print(f"Scheduler was not started: {exc}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:
+        if SCHEDULER:
+            SCHEDULER.stop()
         server.server_close()
 
 

@@ -1,4 +1,4 @@
-"""WeChat Official Account draft publishing."""
+"""WeChat Official Account publishing."""
 
 from __future__ import annotations
 
@@ -29,12 +29,17 @@ class WeChatPublishError(RuntimeError):
 
 
 @dataclass
-class WeChatDraftResult:
+class WeChatPublishResult:
     media_id: str
     title: str
     digest: str
     thumb_media_id: str
+    mode: str = "draft"
+    publish_id: str | None = None
     record_path: str | None = None
+
+
+WeChatDraftResult = WeChatPublishResult
 
 
 class WeChatPublisher:
@@ -70,8 +75,34 @@ class WeChatPublisher:
         content_source_url: str | None = None,
         record_dir: Path | None = None,
     ) -> WeChatDraftResult:
+        return await self.publish_markdown(
+            markdown_text,
+            title=title,
+            digest=digest,
+            author=author,
+            cover_image=cover_image,
+            content_source_url=content_source_url,
+            record_dir=record_dir,
+            mode="draft",
+        )
+
+    async def publish_markdown(
+        self,
+        markdown_text: str,
+        *,
+        title: str | None = None,
+        digest: str | None = None,
+        author: str | None = None,
+        cover_image: str | None = None,
+        content_source_url: str | None = None,
+        record_dir: Path | None = None,
+        mode: str | None = None,
+    ) -> WeChatPublishResult:
         if self.client is None:
             raise RuntimeError("Use WeChatPublisher as an async context manager.")
+        final_mode = mode or self.config.publish_mode
+        if final_mode not in {"draft", "publish"}:
+            raise WeChatPublishError(f"Unsupported WeChat publish mode: {final_mode}")
 
         final_title = (title or extract_title(markdown_text)).strip()[:64]
         final_digest = (digest or extract_digest(markdown_text, self.config.default_digest)).strip()[:120]
@@ -90,12 +121,17 @@ class WeChatPublisher:
             thumb_media_id=thumb_media_id,
             content_source_url=content_source_url,
         )
+        publish_id = None
+        if final_mode == "publish":
+            publish_id = await self.submit_freepublish(token, media_id)
 
-        result = WeChatDraftResult(
+        result = WeChatPublishResult(
             media_id=media_id,
             title=final_title,
             digest=final_digest,
             thumb_media_id=thumb_media_id,
+            mode=final_mode,
+            publish_id=publish_id,
         )
         if record_dir:
             result.record_path = str(self.save_record(record_dir, result))
@@ -169,14 +205,29 @@ class WeChatPublisher:
             raise WeChatPublishError(f"WeChat draft media_id missing: {payload}")
         return str(media_id)
 
-    def save_record(self, record_dir: Path, result: WeChatDraftResult) -> Path:
+    async def submit_freepublish(self, access_token: str, media_id: str) -> str:
+        response = await self.client.post(
+            f"{WECHAT_API_BASE}/cgi-bin/freepublish/submit",
+            params={"access_token": access_token},
+            json={"media_id": media_id},
+        )
+        payload = self._json_response(response)
+        publish_id = payload.get("publish_id")
+        if not publish_id:
+            raise WeChatPublishError(f"WeChat publish_id missing: {payload}")
+        return str(publish_id)
+
+    def save_record(self, record_dir: Path, result: WeChatPublishResult) -> Path:
         record_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        path = record_dir / f"{timestamp}-{result.media_id}.json"
+        identifier = result.publish_id or result.media_id
+        path = record_dir / f"{timestamp}-{identifier}.json"
         path.write_text(
             json.dumps(
                 {
+                    "mode": result.mode,
                     "media_id": result.media_id,
+                    "publish_id": result.publish_id,
                     "title": result.title,
                     "digest": result.digest,
                     "thumb_media_id": result.thumb_media_id,

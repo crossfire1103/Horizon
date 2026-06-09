@@ -1,4 +1,4 @@
-"""CLI entry point for Horizon."""
+"""CLI entry point for AI CTO Daily."""
 
 import argparse
 import asyncio
@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 from .storage.manager import ConfigError, StorageManager
-from .orchestrator import HorizonOrchestrator
+from .orchestrator import AICTODailyOrchestrator
 
 
 console = Console()
@@ -17,16 +17,9 @@ console = Console()
 
 def print_banner():
     """Print the application banner."""
-    banner = r"""
-[bold blue]
-  _    _            _
- | |  | |          (_)
- | |__| | ___  _ __ _ ___  ___  _ __
- |  __  |/ _ \| '__| |_  / / _ \| '_ \
- | |  | | (_) | |  | |/ / | (_) | | | |
- |_|  |_|\___/|_|  |_/___| \___/|_| |_|
-[/bold blue]
-[cyan]  AI-Driven Information Aggregation System[/cyan]
+    banner = """
+[bold blue]AI CTO Daily[/bold blue]
+[cyan]  CTO-oriented AI technology briefing system[/cyan]
     """
     console.print(banner)
 
@@ -35,7 +28,7 @@ def main():
     """Main CLI entry point."""
     print_banner()
 
-    parser = argparse.ArgumentParser(description="Horizon - AI-Driven Information Aggregation System")
+    parser = argparse.ArgumentParser(description="AI CTO Daily briefing pipeline")
     parser.add_argument("--hours", type=int, help="Force fetch from last N hours")
     args = parser.parse_args()
 
@@ -62,7 +55,7 @@ def main():
                     f"  [cyan]cp {example_path} {data_dir_path / 'config.json'}[/cyan]\n"
                 )
             console.print(
-                "Or run [bold cyan]uv run horizon-wizard[/bold cyan] to launch the interactive setup wizard.\n"
+                "Or run [bold cyan]uv run ai-cto-daily-wizard[/bold cyan] to launch the interactive setup wizard.\n"
             )
             sys.exit(1)
         except ConfigError as e:
@@ -73,7 +66,7 @@ def main():
             sys.exit(1)
 
         # Create and run orchestrator
-        orchestrator = HorizonOrchestrator(config, storage)
+        orchestrator = AICTODailyOrchestrator(config, storage)
         asyncio.run(orchestrator.run(force_hours=args.hours))
 
     except KeyboardInterrupt:

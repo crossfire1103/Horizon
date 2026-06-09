@@ -1,7 +1,7 @@
 theme: jekyll-theme-cayman
 title: AI CTO Daily
 description: CTO-oriented daily briefing for AI technology, engineering strategy, and infrastructure
-baseurl: "/Horizon" # the subpath of your site, e.g. /blog
+baseurl: "/AI-CTO-Daily" # the subpath of your site, e.g. /blog
 url: "https://thysrael.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 
 # Build settings

@@ -1,16 +1,16 @@
 <div align="center">
 
-# 🌅 Horizon
+# 🌅 AI CTO Daily
 
-**Enjoy the News itself. Leave others to Horizon**
+**Enjoy the News itself. Leave others to AI CTO Daily**
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json&style=flat-square)](https://github.com/astral-sh/uv)
-[![Daily Summary](https://github.com/Thysrael/Horizon/actions/workflows/deploy-docs.yml/badge.svg?style=flat-square)](https://thysrael.github.io/Horizon/)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/Thysrael/Horizon?style=flat-square)](https://github.com/Thysrael/Horizon/commits/main)
+[![Daily Summary](https://github.com/crossfire1103/AI-CTO-Daily/actions/workflows/deploy-docs.yml/badge.svg?style=flat-square)](https://crossfire1103.github.io/AI-CTO-Daily/)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/crossfire1103/AI-CTO-Daily?style=flat-square)](https://github.com/crossfire1103/AI-CTO-Daily/commits/main)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 ![Sources Welcome](https://img.shields.io/badge/📡_sources-welcome-f97316?style=flat-square)
-<a href="https://hellogithub.com/repository/Thysrael/Horizon" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=7a4b606e28e4477998d35851cf4fdddf&claim_uid=rtjnLkYT7ziQJUG&theme=small" alt="Featured｜HelloGitHub" /></a>
+<a href="https://hellogithub.com/repository/crossfire1103/AI-CTO-Daily" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=7a4b606e28e4477998d35851cf4fdddf&claim_uid=rtjnLkYT7ziQJUG&theme=small" alt="Featured｜HelloGitHub" /></a>
 <br>
 
 ![Claude](https://img.shields.io/badge/Claude-f0daba?style=flat-square&logo=anthropic&logoColor=black)
@@ -24,13 +24,13 @@
 
 📡 Your own AI-powered news radar. Generates daily briefings in English & Chinese. | 构建你专属的 AI 新闻雷达
 
-[📖 Live Demo](https://thysrael.github.io/Horizon/) · [📋 Configuration Guide](https://thysrael.github.io/Horizon/configuration) · [简体中文](README_zh.md)
+[📖 Live Demo](https://crossfire1103.github.io/AI-CTO-Daily/) · [📋 Configuration Guide](https://crossfire1103.github.io/AI-CTO-Daily/configuration) · [简体中文](README_zh.md)
 
 </div>
 
 ## Customized Version
 
-This repository is my customized version of Horizon, adjusted for a more focused AI/CTO daily briefing workflow. Compared with the upstream project, this version is tuned to:
+This repository is my customized version of AI CTO Daily, adjusted for a more focused AI/CTO daily briefing workflow. Compared with the upstream project, this version is tuned to:
 
 - Keep the radar stricter on AI-related topics and filter out generic tech news more aggressively.
 - Generate one bilingual report, with the Chinese version appended below the English version.
@@ -39,7 +39,7 @@ This repository is my customized version of Horizon, adjusted for a more focused
 - Store run artifacts, stage outputs, prompts, responses, and optional AI call cache under `data/runs/` for debugging and token-saving experiments.
 - Preserve source-language context before enrichment to reduce meaning loss from repeated translation.
 
-The original Horizon project remains the foundation; this fork is shaped around my own source mix, reading preferences, and CTO-focused AI news workflow.
+The original AI CTO Daily project remains the foundation; this fork is shaped around my own source mix, reading preferences, and CTO-focused AI news workflow.
 
 ## Screenshots
 
@@ -77,11 +77,11 @@ The original Horizon project remains the foundation; this fork is shaped around 
 </table>
 </details>
 
-## Why Horizon?
+## Why AI CTO Daily?
 
-Good news is scattered; bad news is endless. Horizon gives you a personal first pass over Hacker News, Reddit, Telegram, RSS, and GitHub: it fetches, deduplicates, scores, filters, and enriches stories with background context and community discussion.
+Good news is scattered; bad news is endless. AI CTO Daily gives you a personal first pass over Hacker News, Reddit, Telegram, RSS, and GitHub: it fetches, deduplicates, scores, filters, and enriches stories with background context and community discussion.
 
-But Horizon is not just another summarizer. AI is great at reducing noise, but news still needs human taste: the sources you trust, the comments that change how you read a story, and the hidden gems only people can share. Horizon keeps that human layer in the loop with customizable sources, thresholds, models, languages, delivery channels, comment summaries, and a community source hub.
+But AI CTO Daily is not just another summarizer. AI is great at reducing noise, but news still needs human taste: the sources you trust, the comments that change how you read a story, and the hidden gems only people can share. AI CTO Daily keeps that human layer in the loop with customizable sources, thresholds, models, languages, delivery channels, comment summaries, and a community source hub.
 
 ## Features
 
@@ -185,8 +185,8 @@ flowchart LR
 **Option A: Local Installation**
 
 ```bash
-git clone https://github.com/Thysrael/Horizon.git
-cd Horizon
+git clone https://github.com/crossfire1103/AI-CTO-Daily.git
+cd AI CTO Daily
 
 # Install with uv (recommended)
 uv sync
@@ -215,19 +215,19 @@ uv pip install --only-binary=:all: openbb openbb-benzinga
 **Option B: Docker**
 
 ```bash
-git clone https://github.com/Thysrael/Horizon.git
-cd Horizon
+git clone https://github.com/crossfire1103/AI-CTO-Daily.git
+cd AI CTO Daily
 
 # Configure environment
 cp .env.example .env
 cp data/config.example.json data/config.json
 # Edit .env and data/config.json with your API keys and preferences
 
-# Run with Docker Compose
-docker compose run --rm horizon
+# Run the web service with Docker Compose
+docker compose up -d
 
-# Or run with custom time window
-docker compose run --rm horizon --hours 48
+# Open the service
+http://127.0.0.1:8765
 ```
 
 ### 2. Configure
@@ -235,7 +235,7 @@ docker compose run --rm horizon --hours 48
 **Option A: Interactive wizard (recommended)**
 
 ```bash
-uv run horizon-wizard
+uv run ai-cto-daily-wizard
 ```
 
 The wizard asks about your interests (e.g. "LLM inference", "嵌入式", "web security") and auto-generates `data/config.json`.
@@ -295,8 +295,8 @@ For the full reference, see the [Configuration Guide](docs/configuration.md).
 #### Local Installation
 
 ```bash
-uv run horizon           # Run with default 24h window
-uv run horizon --hours 48  # Fetch from last 48 hours
+uv run ai-cto-daily           # Run with default 24h window
+uv run ai-cto-daily --hours 48  # Fetch from last 48 hours
 ```
 
 #### Local Web Console
@@ -304,23 +304,50 @@ uv run horizon --hours 48  # Fetch from last 48 hours
 This customized version also includes a local Web UI for day-to-day operation:
 
 ```bash
-uv run horizon-web
+uv run ai-cto-daily-web
 ```
 
 Open `http://127.0.0.1:8765` to run the pipeline, tail run logs, edit and validate `data/config.json`, inspect generated summaries, and browse debug artifacts such as stage outputs and AI calls under `data/runs/`.
 
+#### Local Scheduler
+
+Configure `schedule` in `data/config.json`, then run the scheduler as a long-lived local service:
+
+```json
+"schedule": {
+  "enabled": true,
+  "timezone": "Asia/Shanghai",
+  "daily_times": ["09:00"],
+  "interval_minutes": null,
+  "hours": 30,
+  "run_on_start": false,
+  "prevent_overlap": true
+}
+```
+
+```bash
+uv run ai-cto-daily-scheduler
+```
+
+The Web console also includes a Schedule page. When `schedule.enabled` is `true`, `uv run ai-cto-daily-web` auto-starts the scheduler.
+
 #### With Docker
 
 ```bash
-docker compose run --rm horizon           # Run with default 24h window
-docker compose run --rm horizon --hours 48  # Fetch from last 48 hours
+docker compose up -d
 ```
 
-The generated report will be saved to `data/summaries/`.
+Open `http://127.0.0.1:8765`. The container runs the Web console as a long-lived service and auto-starts the scheduler when `schedule.enabled` is `true`.
+
+For one-off pipeline runs inside Docker:
+
+```bash
+docker compose run --rm app ai-cto-daily --hours 30
+```
 
 ### 4. Automate (Optional)
 
-Horizon works great as a **GitHub Actions** cron job. See [`.github/workflows/daily-summary.yml`](.github/workflows/daily-summary.yml) for a ready-to-use workflow that generates and deploys your daily briefing to GitHub Pages automatically.
+AI CTO Daily works great as a **GitHub Actions** cron job. See [`.github/workflows/daily-summary.yml`](.github/workflows/daily-summary.yml) for a ready-to-use workflow that generates and deploys your daily briefing to GitHub Pages automatically.
 
 ## Supported Sources
 
@@ -336,37 +363,37 @@ Horizon works great as a **GitHub Actions** cron job. See [`.github/workflows/da
 
 ## Where Your Briefing Goes
 
-Horizon can publish or deliver the generated briefing in several ways:
+AI CTO Daily can publish or deliver the generated briefing in several ways:
 
 | Channel | What it does |
 |---------|--------------|
 | **GitHub Pages Daily Site** | Copies generated Markdown into `docs/` so GitHub Pages can publish a daily-updated briefing site |
 | **Email Subscription** | Sends the daily briefing to subscribers and handles subscribe/unsubscribe requests through SMTP/IMAP |
 | **Webhook Notification** | Pushes success or failure results to Feishu/Lark, DingTalk, Slack, Discord, or any custom webhook endpoint |
-| **MCP Server** | Exposes Horizon pipeline steps as tools so AI assistants can fetch, score, filter, enrich, summarize, and run the full workflow |
+| **MCP Server** | Exposes AI CTO Daily pipeline steps as tools so AI assistants can fetch, score, filter, enrich, summarize, and run the full workflow |
 
 For setup details, see the [Configuration Guide](docs/configuration.md). For MCP tool references and client setup, see [`src/mcp/README.md`](src/mcp/README.md) and [`src/mcp/integration.md`](src/mcp/integration.md).
 
 ## Supported By
 
-Horizon is an open-source project maintained in spare time. If you'd like to support the project or be listed here, feel free to [open an issue](https://github.com/Thysrael/Horizon/issues/new) or [email me](mailto:thysrael@163.com).
+AI CTO Daily is an open-source project maintained in spare time. If you'd like to support the project or be listed here, feel free to [open an issue](https://github.com/crossfire1103/AI-CTO-Daily/issues/new) or [email me](mailto:thysrael@163.com).
 
 | Supporter | Details |
 |-----------|---------|
-| [<img src="docs/assets/compshare-logo.png" alt="Compshare / 优云智算" width="220" />](https://www.compshare.cn/?ytag=GPU_YY_git_Horizon) | Compshare currently supports Horizon. Compshare is UCloud's AI cloud platform, offering cost-effective monthly and pay-as-you-go domestic model agent plans starting from RMB 49/month, as well as stable officially relayed overseas models. It supports Claude Code, Codex, and API usage, with enterprise-grade high concurrency, 24/7 technical support, and self-service invoicing.<br><br>Register through their [link](https://www.compshare.cn/?ytag=GPU_YY_git_Horizon) to receive a free RMB 5 trial credit. |
+| [<img src="docs/assets/compshare-logo.png" alt="Compshare / 优云智算" width="220" />](https://www.compshare.cn/?ytag=GPU_YY_git_AI CTO Daily) | Compshare currently supports AI CTO Daily. Compshare is UCloud's AI cloud platform, offering cost-effective monthly and pay-as-you-go domestic model agent plans starting from RMB 49/month, as well as stable officially relayed overseas models. It supports Claude Code, Codex, and API usage, with enterprise-grade high concurrency, 24/7 technical support, and self-service invoicing.<br><br>Register through their [link](https://www.compshare.cn/?ytag=GPU_YY_git_AI CTO Daily) to receive a free RMB 5 trial credit. |
 
 ## Documentation
 
 | Guide | Description |
 |-------|-------------|
 | [Configuration](docs/configuration.md) | AI providers, sources, filtering, email, webhook, GitHub Pages, and MCP setup |
-| [Scoring](docs/scoring.md) | How Horizon evaluates and ranks news items |
+| [Scoring](docs/scoring.md) | How AI CTO Daily evaluates and ranks news items |
 | [Scrapers](docs/scrapers.md) | Source scraper details and extension notes |
 | [MCP Tools](src/mcp/README.md) | Tool reference for MCP-compatible clients |
 
 ## Project Status
 
-Horizon already supports the full daily briefing loop: multi-source collection, AI scoring, deduplication, enrichment, comment summaries, bilingual generation, GitHub Pages publishing, email delivery, webhook delivery, Docker deployment, MCP integration, and the setup wizard.
+AI CTO Daily already supports the full daily briefing loop: multi-source collection, AI scoring, deduplication, enrichment, comment summaries, bilingual generation, GitHub Pages publishing, email delivery, webhook delivery, Docker deployment, MCP integration, and the setup wizard.
 
 Planned improvements:
 
@@ -381,7 +408,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for code, docu
 
 ### Share Sources
 
-Want to share valuable source discoveries with the Horizon community? Please submit them through **[horizon1123.top](https://horizon1123.top)**.
+Want to share valuable source discoveries with the AI CTO Daily community? Please submit them through **[ai-cto-daily1123.top](https://ai-cto-daily1123.top)**.
 
 ## Acknowledgements
 

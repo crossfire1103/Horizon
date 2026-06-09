@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Horizon, please do **not** open a public issue.
+If you discover a security vulnerability in AI CTO Daily, please do **not** open a public issue.
 Instead, please report it privately by email:
 **thysrael@gmail.com**
 
@@ -22,7 +22,7 @@ I will try to:
 
 ## Supported Versions
 
-Security updates are provided for the latest maintained version of Horizon.
+Security updates are provided for the latest maintained version of AI CTO Daily.
 
 ## Disclosure Policy
 

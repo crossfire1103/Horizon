@@ -28,7 +28,7 @@ from .ai.tokens import get_usage_snapshot
 from .storage.artifacts import ArtifactStore, ai_trace_context
 
 
-class HorizonOrchestrator:
+class AICTODailyOrchestrator:
     """Orchestrates the complete workflow for content aggregation and analysis."""
 
     def __init__(self, config: Config, storage: StorageManager):
@@ -55,7 +55,7 @@ class HorizonOrchestrator:
         Args:
             force_hours: Optional override for time window in hours
         """
-        self.console.print("[bold cyan]🌅 Horizon - Starting aggregation...[/bold cyan]\n")
+        self.console.print("[bold cyan]AI CTO Daily - Starting aggregation...[/bold cyan]\n")
 
         # Check email subscriptions if configured
         if (
@@ -161,7 +161,7 @@ class HorizonOrchestrator:
                     front_matter = (
                         "---\n"
                         "layout: default\n"
-                        f"title: \"Horizon Summary: {today} ({lang.upper()})\"\n"
+                        f"title: \"AI CTO Daily: {today} ({lang.upper()})\"\n"
                         f"date: {today}\n"
                         f"lang: {lang}\n"
                         "---\n\n"
@@ -186,7 +186,7 @@ class HorizonOrchestrator:
                 if self.email_manager and self.config.email and self.config.email.enabled:
                     self.console.print(f"📧 Sending {lang.upper()} email summary...")
                     subscribers = self.storage.load_subscribers()
-                    subject = f"Horizon Summary ({lang.upper()}) - {today}"
+                    subject = f"AI CTO Daily ({lang.upper()}) - {today}"
                     self.email_manager.send_daily_summary(summary, subject, subscribers)
 
                 # Send webhook notification if configured
@@ -200,7 +200,7 @@ class HorizonOrchestrator:
                         summarizer=summarizer,
                     )
 
-            self.console.print("[bold green]✅ Horizon completed successfully![/bold green]")
+            self.console.print("[bold green]AI CTO Daily completed successfully![/bold green]")
             usage = get_usage_snapshot()
             if usage.total_tokens > 0:
                 self.console.print(
@@ -618,3 +618,4 @@ class HorizonOrchestrator:
         summarizer = DailySummarizer(self.config.summary)
 
         return await summarizer.generate_summary(items, date, total_fetched, language=language)
+

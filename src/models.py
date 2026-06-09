@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, HttpUrl, Field, field_validator
+from pydantic import BaseModel, HttpUrl, Field, field_validator, model_validator
 
 
 class SourceType(str, Enum):
@@ -341,6 +341,50 @@ class ArtifactConfig(BaseModel):
     replay_ai_calls: bool = False
 
 
+class ScheduleConfig(BaseModel):
+    """Local long-running schedule configuration."""
+
+    enabled: bool = False
+    timezone: str = "Asia/Shanghai"
+    daily_times: List[str] = Field(default_factory=lambda: ["09:00"])
+    interval_minutes: Optional[int] = None
+    hours: Optional[int] = 30
+    run_on_start: bool = False
+    prevent_overlap: bool = True
+
+    @field_validator("daily_times")
+    @classmethod
+    def validate_daily_times(cls, values: List[str]) -> List[str]:
+        for value in values:
+            parts = value.split(":")
+            if len(parts) != 2 or not all(part.isdigit() for part in parts):
+                raise ValueError(f"schedule.daily_times entries must be HH:MM, got '{value}'")
+            hour, minute = int(parts[0]), int(parts[1])
+            if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                raise ValueError(f"schedule.daily_times entries must be HH:MM, got '{value}'")
+        return values
+
+    @field_validator("interval_minutes")
+    @classmethod
+    def validate_interval_minutes(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value <= 0:
+            raise ValueError("schedule.interval_minutes must be positive")
+        return value
+
+    @field_validator("hours")
+    @classmethod
+    def validate_hours(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value <= 0:
+            raise ValueError("schedule.hours must be positive")
+        return value
+
+    @model_validator(mode="after")
+    def validate_schedule_shape(self) -> "ScheduleConfig":
+        if self.enabled and self.interval_minutes is None and not self.daily_times:
+            raise ValueError("schedule.daily_times is required when interval_minutes is not set")
+        return self
+
+
 class WeChatPublishingConfig(BaseModel):
     """WeChat Official Account publishing configuration."""
 
@@ -355,7 +399,7 @@ class WeChatPublishingConfig(BaseModel):
     @field_validator("publish_mode")
     @classmethod
     def validate_publish_mode(cls, v: str) -> str:
-        allowed = {"draft"}
+        allowed = {"draft", "publish"}
         if v not in allowed:
             raise ValueError(f"wechat.publish_mode must be one of {allowed}, got '{v}'")
         return v
@@ -376,6 +420,7 @@ class Config(BaseModel):
     filtering: FilteringConfig
     summary: SummaryConfig = Field(default_factory=SummaryConfig)
     artifacts: ArtifactConfig = Field(default_factory=ArtifactConfig)
+    schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
     publishing: PublishingConfig = Field(default_factory=PublishingConfig)
     email: Optional[EmailConfig] = None
     webhook: Optional[WebhookConfig] = None

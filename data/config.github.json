@@ -78,7 +78,10 @@
     },
     "twitter": {
       "enabled": false,
-      "users": ["karpathy", "ylecun"],
+      "users": [
+        "karpathy",
+        "ylecun"
+      ],
       "fetch_limit": 10,
       "fetch_reply_text": false,
       "max_replies_per_tweet": 3,
@@ -96,14 +99,26 @@
           "provider": "yfinance",
           "fetch_limit": 20,
           "category": "equities",
-          "symbols": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
+          "symbols": [
+            "AAPL",
+            "MSFT",
+            "NVDA",
+            "GOOGL",
+            "AMZN",
+            "META",
+            "TSLA"
+          ]
         }
       ]
     },
     "ossinsight": {
       "enabled": false,
       "period": "past_24_hours",
-      "languages": ["All", "Python", "TypeScript"],
+      "languages": [
+        "All",
+        "Python",
+        "TypeScript"
+      ],
       "keywords": [],
       "min_stars": 10,
       "max_items": 30
@@ -131,6 +146,17 @@
     "root_dir": "data/runs",
     "cache_ai_calls": true,
     "replay_ai_calls": false
+  },
+  "schedule": {
+    "enabled": false,
+    "timezone": "Asia/Shanghai",
+    "daily_times": [
+      "09:00"
+    ],
+    "interval_minutes": null,
+    "hours": 30,
+    "run_on_start": false,
+    "prevent_overlap": true
   },
   "publishing": {
     "wechat": {
@@ -170,7 +196,7 @@
           "elements": [
             {
               "tag": "markdown",
-              "content": "Horizon生成结果: #{result}\nHorizon日报重要资讯数量: #{important_items}/#{all_items}"
+              "content": "AI CTO Daily 生成结果: #{result}\nAI CTO Daily 重要资讯数量: #{important_items}/#{all_items}"
             },
             {
               "tag": "hr"

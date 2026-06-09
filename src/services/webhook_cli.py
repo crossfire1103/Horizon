@@ -186,7 +186,7 @@ def main() -> None:
         except FileNotFoundError:
             console.print("[bold red]Configuration file not found![/bold red]")
             console.print(
-                "Run [bold cyan]uv run horizon-wizard[/bold cyan] to set up your configuration."
+                "Run [bold cyan]uv run ai-cto-daily-wizard[/bold cyan] to set up your configuration."
             )
             sys.exit(1)
         except ConfigError as e:

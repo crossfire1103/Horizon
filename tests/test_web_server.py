@@ -17,6 +17,16 @@ def test_validate_config_text_accepts_example_config():
     assert config.filtering.ai_score_threshold > 0
 
 
+def test_validate_config_text_accepts_wechat_publish_mode():
+    with open("data/config.example.json", "r", encoding="utf-8") as f:
+        data = json.loads(f.read())
+    data["publishing"]["wechat"]["publish_mode"] = "publish"
+
+    config = _validate_config_text(json.dumps(data))
+
+    assert config.publishing.wechat.publish_mode == "publish"
+
+
 def test_validate_config_text_rejects_invalid_json():
     with pytest.raises(ConfigError):
         _validate_config_text("{not-json")

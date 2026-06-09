@@ -5,7 +5,7 @@ title: Configuration Guide
 
 # Configuration Guide
 
-Horizon is configured through two files: a `.env` file for API keys and a `data/config.json` file for sources, AI provider, and filtering options.
+AI CTO Daily is configured through two files: a `.env` file for API keys and a `data/config.json` file for sources, AI provider, and filtering options.
 
 ## AI Providers
 
@@ -20,9 +20,9 @@ OPENAI_API_KEY=sk-your-key
 GOOGLE_API_KEY=your-gemini-key
 ```
 
-When Horizon starts, environment variables have priority because
+When AI CTO Daily starts, environment variables have priority because
 `data/config.json` does not store the secret. For local VS Code runs, create
-`.env` in the repository root and launch Horizon from that same root directory.
+`.env` in the repository root and launch AI CTO Daily from that same root directory.
 
 Common API key variable names:
 
@@ -171,7 +171,7 @@ By default, AI scoring and enrichment run one item at a time. If your API endpoi
 }
 ```
 
-For OpenAI-compatible gateways, Horizon sends `temperature` by default. If a newer reasoning-style model rejects that parameter with an error such as `temperature is deprecated for this model`, Horizon retries once without it and remembers that capability for later requests.
+For OpenAI-compatible gateways, AI CTO Daily sends `temperature` by default. If a newer reasoning-style model rejects that parameter with an error such as `temperature is deprecated for this model`, AI CTO Daily retries once without it and remembers that capability for later requests.
 
 ## Information Sources
 
@@ -351,13 +351,13 @@ uv pip install --only-binary=:all: openbb openbb-benzinga
 
 - `enabled` — enable or disable the OpenBB source globally
 - `watchlists` — list of named ticker groups; each watchlist becomes one `news.company()` call per run
-- `name` — label shown in Horizon metadata and selection breakdowns
+- `name` — label shown in AI CTO Daily metadata and selection breakdowns
 - `provider` — OpenBB provider name such as `yfinance` or `benzinga`
 - `fetch_limit` — maximum news rows requested for that watchlist
 - `category` — optional tag stored on fetched items
 - `symbols` — ticker symbols to fetch together; group symbols by provider to keep requests efficient
 
-OpenBB provider credentials are handled by the OpenBB SDK itself, using its own environment variables or user settings. Horizon does not pass those secrets through `data/config.json`.
+OpenBB provider credentials are handled by the OpenBB SDK itself, using its own environment variables or user settings. AI CTO Daily does not pass those secrets through `data/config.json`.
 
 ### OSS Insight (Trending GitHub Repos)
 
@@ -441,7 +441,7 @@ Example:
 
 ## Email Subscription
 
-Email delivery is optional and disabled unless `email.enabled` is `true`. Horizon uses SMTP to send daily summaries and IMAP to check subscribe/unsubscribe requests.
+Email delivery is optional and disabled unless `email.enabled` is `true`. AI CTO Daily uses SMTP to send daily summaries and IMAP to check subscribe/unsubscribe requests.
 
 ```json
 {
@@ -455,7 +455,7 @@ Email delivery is optional and disabled unless `email.enabled` is `true`. Horizo
     "imap_port": 993,
     "email_address": "xxx@qq.com",
     "password_env": "EMAIL_PASSWORD",
-    "sender_name": "Horizon Daily",
+    "sender_name": "AI CTO Daily",
     "subscribe_keyword": "SUBSCRIBE",
     "unsubscribe_keyword": "UNSUBSCRIBE"
   }
@@ -464,13 +464,13 @@ Email delivery is optional and disabled unless `email.enabled` is `true`. Horizo
 
 - `enabled`: Turns email subscription handling and daily email delivery on or off.
 - `smtp_server` / `smtp_port`: SMTP server used to send emails.
-- `smtp_username`: Optional SMTP login username. If omitted, Horizon uses `email_address`.
+- `smtp_username`: Optional SMTP login username. If omitted, AI CTO Daily uses `email_address`.
 - `imap_enabled`: Turns IMAP subscribe/unsubscribe checks on or off. Set it to `false` for send-only SMTP providers.
 - `imap_server` / `imap_port`: IMAP server used to scan incoming subscription requests when `imap_enabled` is `true`.
 - `email_address`: Sender account and mailbox checked for subscription requests.
 - `password_env`: Environment variable containing the email password or app password. Defaults to `EMAIL_PASSWORD`.
 - `sender_name`: Display name shown in sent emails.
-- `subscribe_keyword` / `unsubscribe_keyword`: Keywords Horizon looks for in incoming email subjects.
+- `subscribe_keyword` / `unsubscribe_keyword`: Keywords AI CTO Daily looks for in incoming email subjects.
 
 Resend SMTP example:
 
@@ -486,7 +486,7 @@ Resend SMTP example:
     "imap_server": "",
     "imap_port": 993,
     "email_address": "noreply@example.com",
-    "sender_name": "Horizon Daily"
+    "sender_name": "AI CTO Daily"
   }
 }
 ```
@@ -495,7 +495,7 @@ Set `RESEND_API_KEY` in `.env`. Recipients are loaded from `data/subscribers.jso
 
 ## Webhook Notification
 
-Webhook notification is optional and disabled unless `webhook.enabled` is `true`. Horizon can call Feishu/Lark, DingTalk, Slack, Discord, or any custom webhook endpoint when the pipeline succeeds or fails.
+Webhook notification is optional and disabled unless `webhook.enabled` is `true`. AI CTO Daily can call Feishu/Lark, DingTalk, Slack, Discord, or any custom webhook endpoint when the pipeline succeeds or fails.
 
 ```json
 {
@@ -524,14 +524,14 @@ Webhook notification is optional and disabled unless `webhook.enabled` is `true`
 - `layout`: Controls the message layout. Use `markdown` for templated Markdown delivery, or `collapsible` with `platform: "feishu"` / `"lark"` for a single Feishu Card JSON 2.0 message with each item in a collapsed panel.
 - `fallback_layout`: Reserved fallback layout for unsupported platform/layout combinations. The current safe fallback is `markdown`.
 - `languages`: Optional webhook-only language filter. Use `["zh"]` or `["en"]` to send only selected languages; use `null` or omit it to send all configured `ai.languages`.
-- `request_body`: Optional request body. If empty, Horizon sends a `GET` request. If provided, Horizon sends a `POST` request.
+- `request_body`: Optional request body. If empty, AI CTO Daily sends a `GET` request. If provided, AI CTO Daily sends a `POST` request.
 - `headers`: Optional custom headers, one `Key: Value` pair per line.
 
-When `request_body` is a JSON object or array, Horizon renders placeholders and serializes it as JSON. When it is a string, Horizon renders it directly and detects JSON if the rendered string is valid JSON.
+When `request_body` is a JSON object or array, AI CTO Daily renders placeholders and serializes it as JSON. When it is a string, AI CTO Daily renders it directly and detects JSON if the rendered string is valid JSON.
 
 ### Delivery Modes And Layouts
 
-`delivery` controls how many webhook messages Horizon sends:
+`delivery` controls how many webhook messages AI CTO Daily sends:
 
 - `summary`: Sends one message containing the full daily summary. This is simple, but some chat platforms may reject long messages.
 - `summary_and_items`: Sends one overview message plus one message per selected item. In each item message, `#{summary}` contains only that item's Markdown body. This is useful for platforms that reject or truncate long messages.
@@ -539,7 +539,7 @@ When `request_body` is a JSON object or array, Horizon renders placeholders and 
 `layout` controls how each message is rendered:
 
 - `markdown`: Uses your `request_body` template for each message. This is the default and works with generic webhooks, DingTalk, Slack, Discord, Feishu, and Lark.
-- `collapsible`: Currently supported for `platform: "feishu"` or `"lark"`. Horizon ignores `request_body` and builds one Feishu/Lark Card JSON 2.0 message with each item in a collapsed panel.
+- `collapsible`: Currently supported for `platform: "feishu"` or `"lark"`. AI CTO Daily ignores `request_body` and builds one Feishu/Lark Card JSON 2.0 message with each item in a collapsed panel.
 
 For platforms without a platform-specific layout, keep `layout: "markdown"` and choose the message count with `delivery`.
 
@@ -561,7 +561,7 @@ Example `summary_and_items` Markdown delivery config:
 }
 ```
 
-With `summary_and_items`, Horizon sends one overview plus one message per selected item. `overview_position: "last"` sends item messages first and keeps the overview as the newest chat message; omit it or set `"first"` to send the overview first.
+With `summary_and_items`, AI CTO Daily sends one overview plus one message per selected item. `overview_position: "last"` sends item messages first and keeps the overview as the newest chat message; omit it or set `"first"` to send the overview first.
 
 ### Webhook Templates
 
@@ -589,7 +589,7 @@ When `delivery` is `summary_and_items`, item messages also include:
 | `#{item_url}` | Current item URL |
 | `#{item_score}` | Current item AI score |
 
-For webhook delivery, Horizon flattens HTML disclosure blocks such as `<details><summary>...</summary>` in `#{summary}` into plain Markdown link lists. This makes the generated summary easier to render in chat products. Saved Markdown files, GitHub Pages, and email content are unchanged.
+For webhook delivery, AI CTO Daily flattens HTML disclosure blocks such as `<details><summary>...</summary>` in `#{summary}` into plain Markdown link lists. This makes the generated summary easier to render in chat products. Saved Markdown files, GitHub Pages, and email content are unchanged.
 
 Use `#{key?limit=N&split=DELIM}` to truncate long values by splitting on `DELIM` and keeping segments until the total character count reaches `N`.
 
@@ -599,21 +599,21 @@ Use `#{key?limit=N&split=DELIM}` to truncate long values by splitting on `DELIM`
 
 ### DingTalk
 
-In DingTalk, create a custom group robot and use a custom keyword such as `Horizon`. The keyword must appear in the body content.
+In DingTalk, create a custom group robot and use a custom keyword such as `AI CTO Daily`. The keyword must appear in the body content.
 
 ```json
 {
   "msgtype": "markdown",
   "markdown": {
-    "title": "Horizon #{date} Daily",
-    "text": "Horizon result: #{result}\n\nHorizon important items: #{important_items}/#{all_items}\n\n#{summary}"
+    "title": "AI CTO Daily #{date} Daily",
+    "text": "AI CTO Daily result: #{result}\n\nAI CTO Daily important items: #{important_items}/#{all_items}\n\n#{summary}"
   }
 }
 ```
 
 ### Feishu / Lark
 
-In Feishu or Lark, create a custom group robot and use a custom keyword such as `Horizon`. The keyword must appear in the body content.
+In Feishu or Lark, create a custom group robot and use a custom keyword such as `AI CTO Daily`. The keyword must appear in the body content.
 
 Use Card JSON 2.0 for Markdown rendering. The card must include `"schema": "2.0"` and put rich-text Markdown components under `card.body.elements`.
 
@@ -632,7 +632,7 @@ To keep the group chat compact while still allowing readers to browse the full b
 }
 ```
 
-With this layout, Horizon sends one interactive card containing the overview and one collapsed panel per selected item. Each panel can be expanded in Feishu to read the full item detail. The regular `request_body` template is ignored for this rendered card.
+With this layout, AI CTO Daily sends one interactive card containing the overview and one collapsed panel per selected item. Each panel can be expanded in Feishu to read the full item detail. The regular `request_body` template is ignored for this rendered card.
 
 ```json
 {
@@ -653,7 +653,7 @@ With this layout, Horizon sends one interactive card containing the overview and
       "elements": [
         {
           "tag": "markdown",
-          "content": "Horizon result: #{result}\nHorizon important items: #{important_items}/#{all_items}"
+          "content": "AI CTO Daily result: #{result}\nAI CTO Daily important items: #{important_items}/#{all_items}"
         },
         {
           "tag": "hr"
@@ -670,16 +670,16 @@ With this layout, Horizon sends one interactive card containing the overview and
 
 ## Static Site
 
-Horizon writes generated summaries to `data/summaries/` and copies publishable Markdown into `docs/` for the GitHub Pages site. The repository includes a ready-to-use workflow at `.github/workflows/daily-summary.yml`.
+AI CTO Daily writes generated summaries to `data/summaries/` and copies publishable Markdown into `docs/` for the GitHub Pages site. The repository includes a ready-to-use workflow at `.github/workflows/daily-summary.yml`.
 
 To use GitHub Pages, enable Pages for the repository and run the scheduled workflow or trigger it manually. The generated site is built from the `docs/` directory.
 
 ## MCP Server
 
-Horizon includes an MCP server for AI assistants and MCP-compatible clients.
+AI CTO Daily includes an MCP server for AI assistants and MCP-compatible clients.
 
 ```bash
-uv run horizon-mcp
+uv run ai-cto-daily-mcp
 ```
 
 Available tools include `hz_validate_config`, `hz_fetch_items`, `hz_score_items`, `hz_filter_items`, `hz_enrich_items`, `hz_generate_summary`, and `hz_run_pipeline`.

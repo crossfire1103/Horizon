@@ -45,6 +45,7 @@ data/mcp.secrets.json
 data/mcp-secrets.json
 data/mcp-runs/
 data/publishing/
+data/scheduler-runs/
 data/runs/
 
 docs/_posts/*.md

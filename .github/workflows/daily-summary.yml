@@ -1,4 +1,4 @@
-name: Daily Horizon Summary
+name: Daily AI CTO Summary
 
 on:
   # schedule:
@@ -30,7 +30,7 @@ jobs:
       - name: Prepare GitHub Actions config
         run: cp data/config.github.json data/config.json
 
-      - name: Run Horizon
+      - name: Run AI CTO Daily
         env:
           # Map secrets to environment variables expected by config.json
           # Modify these based on your data/config.github.json provider settings
@@ -38,7 +38,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           LWN_KEY: ${{ secrets.LWN_KEY }}
-        run: uv run horizon --hours 48
+        run: uv run ai-cto-daily --hours 48
 
       - name: Set current date as environment variable
         run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV

@@ -138,12 +138,16 @@ def load_runtime(horizon_path: Path) -> HorizonRuntime:
             details={"error": str(exc)},
         ) from exc
 
+    orchestrator_cls = getattr(orchestrator, "AICTODailyOrchestrator", None)
+    if orchestrator_cls is None:
+        orchestrator_cls = getattr(orchestrator, "HorizonOrchestrator")
+
     return HorizonRuntime(
         horizon_path=horizon_path,
         ContentItem=models.ContentItem,
         Config=models.Config,
         StorageManager=storage.StorageManager,
-        HorizonOrchestrator=orchestrator.HorizonOrchestrator,
+        HorizonOrchestrator=orchestrator_cls,
         create_ai_client=ai_client.create_ai_client,
         ContentAnalyzer=analyzer.ContentAnalyzer,
         ContentEnricher=enricher.ContentEnricher,

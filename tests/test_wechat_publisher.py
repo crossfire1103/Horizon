@@ -146,3 +146,52 @@ def test_wechat_publisher_creates_draft(tmp_path, monkeypatch):
     assert result.thumb_media_id == "thumb123"
     assert result.record_path
     assert len(seen) == 3
+
+
+def test_wechat_publisher_can_submit_direct_publish(tmp_path, monkeypatch):
+    cover = tmp_path / "cover.png"
+    cover.write_bytes(b"fake-image")
+    monkeypatch.setenv("WECHAT_APP_ID", "appid")
+    monkeypatch.setenv("WECHAT_APP_SECRET", "secret")
+
+    seen_paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        if request.url.path == "/cgi-bin/token":
+            return httpx.Response(200, json={"access_token": "token"})
+        if request.url.path == "/cgi-bin/material/add_material":
+            return httpx.Response(200, json={"media_id": "thumb123"})
+        if request.url.path == "/cgi-bin/draft/add":
+            return httpx.Response(200, json={"media_id": "draft123"})
+        if request.url.path == "/cgi-bin/freepublish/submit":
+            payload = __import__("json").loads(request.content.decode("utf-8"))
+            assert payload["media_id"] == "draft123"
+            return httpx.Response(200, json={"publish_id": "pub123"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    async def run():
+        async with httpx.AsyncClient(transport=transport) as client:
+            publisher = WeChatPublisher(
+                WeChatPublishingConfig(cover_image=str(cover), publish_mode="publish"),
+                root_dir=tmp_path,
+                client=client,
+            )
+            return await publisher.publish_markdown(
+                "# My Title\n\nhello",
+                record_dir=tmp_path / "records",
+            )
+
+    result = asyncio.run(run())
+
+    assert result.mode == "publish"
+    assert result.media_id == "draft123"
+    assert result.publish_id == "pub123"
+    assert seen_paths == [
+        "/cgi-bin/token",
+        "/cgi-bin/material/add_material",
+        "/cgi-bin/draft/add",
+        "/cgi-bin/freepublish/submit",
+    ]
