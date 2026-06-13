@@ -1,278 +1,762 @@
 {
-  "domains": [
-    {
-      "id": "ai-ml",
-      "name": "AI / Machine Learning",
-      "name_zh": "人工智能 / 机器学习",
-      "keywords": ["ai", "ml", "llm", "大模型", "机器学习", "deep learning", "深度学习", "neural network", "gpt", "transformer", "diffusion", "生成式", "nlp", "自然语言处理", "computer vision", "计算机视觉"],
-      "sources": [
+  "version": "1.0",
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-5.4-mini",
+    "api_key_env": "OPENAI_API_KEY",
+    "temperature": 0.3,
+    "max_tokens": 4096,
+    "throttle_sec": 0,
+    "analysis_concurrency": 1,
+    "enrichment_concurrency": 1
+  },
+  "email": {
+    "enabled": false,
+    "smtp_server": "smtp.qq.com",
+    "smtp_port": 465,
+    "imap_server": "imap.qq.com",
+    "imap_port": 993,
+    "email_address": "xxx@qq.com",
+    "sender_name": "AI CTO Daily",
+    "subscribe_keyword": "SUBSCRIBE",
+    "unsubscribe_keyword": "UNSUBSCRIBE"
+  },
+  "sources": {
+    "github": [
+      {
+        "type": "repo_releases",
+        "owner": "vllm-project",
+        "repo": "vllm",
+        "enabled": true
+      },
+      {
+        "type": "repo_releases",
+        "owner": "langchain-ai",
+        "repo": "langchain",
+        "enabled": true
+      },
+      {
+        "type": "repo_releases",
+        "owner": "ollama",
+        "repo": "ollama",
+        "enabled": true
+      },
+      {
+        "type": "repo_releases",
+        "owner": "mlc-ai",
+        "repo": "web-llm",
+        "enabled": true
+      },
+      {
+        "type": "repo_releases",
+        "owner": "microsoft",
+        "repo": "autogen",
+        "enabled": true
+      }
+    ],
+    "hackernews": {
+      "enabled": false,
+      "fetch_top_stories": 20,
+      "min_score": 150
+    },
+    "rss": [
+      {
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/",
+        "enabled": true,
+        "category": "ai-tools"
+      },
+      {
+        "name": "OpenAI News",
+        "url": "https://openai.com/news/rss.xml",
+        "enabled": true,
+        "category": "global-ai"
+      },
+      {
+        "name": "Hugging Face Blog",
+        "url": "https://huggingface.co/blog/feed.xml",
+        "enabled": true,
+        "category": "open-source-ai"
+      },
+      {
+        "name": "VentureBeat AI",
+        "url": "https://venturebeat.com/category/ai/feed/",
+        "enabled": false,
+        "category": "ai-news"
+      },
+      {
+        "name": "MIT Technology Review AI",
+        "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
+        "enabled": true,
+        "category": "ai-news"
+      },
+      {
+        "name": "The Gradient",
+        "url": "https://thegradient.pub/rss/",
+        "enabled": true,
+        "category": "ai-research"
+      },
+      {
+        "name": "量子位",
+        "url": "https://www.qbitai.com/feed",
+        "enabled": true,
+        "category": "china-ai"
+      },
+      {
+        "name": "InfoQ 中文",
+        "url": "https://www.infoq.cn/feed",
+        "enabled": true,
+        "category": "china-tech"
+      },
+      {
+        "name": "36氪",
+        "url": "https://36kr.com/feed",
+        "enabled": true,
+        "category": "china-tech"
+      },
+      {
+        "name": "Google News - Artificial Intelligence",
+        "url": "https://news.google.com/rss/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en",
+        "enabled": false,
+        "category": "ai-news"
+      },
+      {
+        "name": "Google News - 人工智能",
+        "url": "https://news.google.com/rss/search?q=人工智能&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        "enabled": false,
+        "category": "china-ai"
+      },
+      {
+        "name": "Google News - 大模型",
+        "url": "https://news.google.com/rss/search?q=大模型&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        "enabled": false,
+        "category": "china-ai"
+      }
+    ],
+    "reddit": {
+      "enabled": true,
+      "subreddits": [
         {
-          "type": "reddit_subreddit",
-          "description": "Top ML research discussions",
-          "description_zh": "机器学习研究讨论",
-          "tags": ["ml", "research"],
-          "config": { "subreddit": "MachineLearning", "sort": "hot", "fetch_limit": 15, "min_score": 60 }
+          "subreddit": "MachineLearning",
+          "enabled": true,
+          "sort": "hot",
+          "time_filter": "day",
+          "fetch_limit": 20,
+          "min_score": 30
         },
         {
-          "type": "reddit_subreddit",
-          "description": "Local LLM community — model releases, benchmarks, deployment tips",
-          "description_zh": "本地大模型社区 — 模型发布、评测、部署技巧",
-          "tags": ["llm", "local"],
-          "config": { "subreddit": "LocalLLaMA", "sort": "hot", "fetch_limit": 15, "min_score": 60 }
+          "subreddit": "LocalLLaMA",
+          "enabled": true,
+          "sort": "hot",
+          "time_filter": "day",
+          "fetch_limit": 20,
+          "min_score": 30
         },
         {
-          "type": "rss",
-          "description": "Simon Willison's blog — LLM tools and experiments",
-          "description_zh": "Simon Willison 博客 — LLM 工具与实验",
-          "tags": ["llm", "tools"],
-          "config": { "name": "Simon Willison", "url": "https://simonwillison.net/atom/everything/", "category": "ai-tools" }
-        },
-        {
-          "type": "github_user",
-          "description": "Andrej Karpathy — AI educator and researcher",
-          "description_zh": "Andrej Karpathy — AI 教育者与研究者",
-          "tags": ["ml", "education"],
-          "config": { "username": "karpathy" }
-        },
-        {
-          "type": "github_repo",
-          "description": "vLLM — high-throughput LLM serving engine",
-          "description_zh": "vLLM — 高吞吐量大模型推理引擎",
-          "tags": ["llm", "inference"],
-          "config": { "owner": "vllm-project", "repo": "vllm" }
-        },
-        {
-          "type": "rss",
-          "description": "QbitAI (量子位) — Chinese AI news and research coverage",
-          "description_zh": "量子位 — AI 资讯与前沿报道（微信公众号）",
-          "tags": ["ai", "news", "chinese"],
-          "config": { "name": "量子位", "url": "https://wechat2rss.xlab.app/feed/7131b577c61365cb47e81000738c10d872685908.xml", "category": "ai-news" }
-        },
-        {
-          "type": "rss",
-          "description": "AI新智元 — Chinese AI news, model releases and industry insights",
-          "description_zh": "新智元 — AI 资讯、模型发布与行业洞察（微信公众号）",
-          "tags": ["ai", "news", "chinese"],
-          "config": { "name": "新智元", "url": "https://wechat2rss.xlab.app/feed/ede30346413ea70dbef5d485ea5cbb95cca446e7.xml", "category": "ai-news" }
+          "subreddit": "artificial",
+          "enabled": true,
+          "sort": "hot",
+          "time_filter": "day",
+          "fetch_limit": 15,
+          "min_score": 30
         }
-      ]
+      ],
+      "users": [],
+      "fetch_comments": 0
+    },
+    "twitter": {
+      "enabled": false,
+      "users": [
+        "karpathy",
+        "ylecun"
+      ],
+      "fetch_limit": 10,
+      "fetch_reply_text": false,
+      "max_replies_per_tweet": 3,
+      "max_tweets_to_expand": 10,
+      "reply_min_likes": 5
+    },
+    "openbb": {
+      "enabled": false,
+      "fetch_filings": false,
+      "filings_provider": "sec",
+      "watchlists": []
+    },
+    "ossinsight": {
+      "enabled": false,
+      "period": "past_24_hours",
+      "languages": [
+        "All",
+        "Python",
+        "TypeScript"
+      ],
+      "keywords": [
+        "ai",
+        "llm",
+        "agent",
+        "rag",
+        "inference"
+      ],
+      "min_stars": 50,
+      "max_items": 20
+    },
+    "steam": {
+      "enabled": false,
+      "fetch_new_releases": true,
+      "max_items": 30,
+      "country": "US",
+      "language": "english",
+      "category": "steam-new-releases",
+      "min_total_reviews": 0,
+      "min_positive_ratio": null,
+      "include_free": true,
+      "include_early_access": true,
+      "candidate_count": 200,
+      "new_release_window_days": 3
+    }
+  },
+  "filtering": {
+    "ai_score_threshold": 7,
+    "time_window_hours": 24
+  },
+  "summary": {
+    "include_summary": false,
+    "include_cto_takeaway": true,
+    "max_detailed_items": 6,
+    "show_scores": false,
+    "compact_remaining": true,
+    "compact_sentence_limit": 2,
+    "include_bilingual": true,
+    "bilingual_secondary_language": "zh",
+    "cto_takeaway_ai_enabled": true,
+    "cto_takeaway_ai_items": 3,
+    "disclosure": "由 AI 生成，人类审核。"
+  },
+  "artifacts": {
+    "enabled": true,
+    "root_dir": "data/runs",
+    "cache_ai_calls": true,
+    "replay_ai_calls": false
+  },
+  "webhook": {
+    "enabled": false,
+    "url_env": "HORIZON_WEBHOOK_URL",
+    "delivery": "summary",
+    "overview_position": "first",
+    "platform": "generic",
+    "layout": "markdown",
+    "fallback_layout": "markdown",
+    "languages": null,
+    "request_body": {
+      "msg_type": "interactive",
+      "card": {
+        "schema": "2.0",
+        "config": {
+          "wide_screen_mode": true
+        },
+        "header": {
+          "title": {
+            "tag": "plain_text",
+            "content": "#{message_title}"
+          },
+          "template": "blue"
+        },
+        "body": {
+          "elements": [
+            {
+              "tag": "markdown",
+              "content": "Horizonç”Ÿæˆç»“æžœ: #{result}\nHorizonæ—¥æŠ¥é‡è¦èµ„è®¯æ•°é‡: #{important_items}/#{all_items}"
+            },
+            {
+              "tag": "hr"
+            },
+            {
+              "tag": "markdown",
+              "content": "#{summary}"
+            }
+          ]
+        }
+      }
+    },
+    "headers": ""
+  },
+  "publishing": {
+    "wechat": {
+      "enabled": true,
+      "appid_env": "WECHAT_APP_ID",
+      "secret_env": "WECHAT_APP_SECRET",
+      "author": "AI CTO Daily",
+      "cover_image": "assets/wechat-cover.png",
+      "default_digest": "今日 AI CTO 技术情报速递",
+      "publish_mode": "draft",
+      "review_reminder_enabled": false,
+      "review_reminder_recipients": [],
+      "review_reminder_subject": "AI CTO Daily is ready for WeChat review",
+      "review_url": "http://192.168.50.2:8765",
+      "auto_create_draft_on_run": true
+    }
+  },
+  "schedule": {
+    "enabled": false,
+    "timezone": "Asia/Shanghai",
+    "daily_times": [
+      "09:00"
+    ],
+    "interval_minutes": null,
+    "hours": 30,
+    "run_on_start": false,
+    "prevent_overlap": true
+  },
+  "active_topic": "ai-cto",
+  "topics": [
+    {
+      "slug": "ai-cto",
+      "name": "AI CTO",
+      "enabled": true,
+      "title_en": "AI CTO Daily",
+      "title_zh": "AI CTO 日报",
+      "description": "AI technology briefing for CTOs and engineering leaders.",
+      "audience": "CTOs, VP Engineering, platform leaders, and senior AI practitioners.",
+      "relevance_prompt": "Only score items highly when they are directly about AI/ML, LLMs, AI agents, model releases, AI infrastructure, AI inference/serving, AI developer tools, AI safety/security, AI product/platform changes, or technical research that directly advances or evaluates AI systems.",
+      "cto_prompt_focus": "Connect news to enterprise technology strategy, architecture, engineering productivity, platform reliability, AI infrastructure cost, security/compliance, vendor strategy, team capability, and roadmap decisions.",
+      "sources": {
+        "github": [
+          {
+            "type": "repo_releases",
+            "owner": "vllm-project",
+            "repo": "vllm",
+            "enabled": true
+          },
+          {
+            "type": "repo_releases",
+            "owner": "langchain-ai",
+            "repo": "langchain",
+            "enabled": true
+          },
+          {
+            "type": "repo_releases",
+            "owner": "ollama",
+            "repo": "ollama",
+            "enabled": true
+          },
+          {
+            "type": "repo_releases",
+            "owner": "mlc-ai",
+            "repo": "web-llm",
+            "enabled": true
+          },
+          {
+            "type": "repo_releases",
+            "owner": "microsoft",
+            "repo": "autogen",
+            "enabled": true
+          }
+        ],
+        "hackernews": {
+          "enabled": false,
+          "fetch_top_stories": 20,
+          "min_score": 150
+        },
+        "rss": [
+          {
+            "name": "Simon Willison",
+            "url": "https://simonwillison.net/atom/everything/",
+            "enabled": true,
+            "category": "ai-tools"
+          },
+          {
+            "name": "OpenAI News",
+            "url": "https://openai.com/news/rss.xml",
+            "enabled": true,
+            "category": "global-ai"
+          },
+          {
+            "name": "Hugging Face Blog",
+            "url": "https://huggingface.co/blog/feed.xml",
+            "enabled": true,
+            "category": "open-source-ai"
+          },
+          {
+            "name": "VentureBeat AI",
+            "url": "https://venturebeat.com/category/ai/feed/",
+            "enabled": false,
+            "category": "ai-news"
+          },
+          {
+            "name": "MIT Technology Review AI",
+            "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
+            "enabled": true,
+            "category": "ai-news"
+          },
+          {
+            "name": "The Gradient",
+            "url": "https://thegradient.pub/rss/",
+            "enabled": true,
+            "category": "ai-research"
+          },
+          {
+            "name": "量子位",
+            "url": "https://www.qbitai.com/feed",
+            "enabled": true,
+            "category": "china-ai"
+          },
+          {
+            "name": "InfoQ 中文",
+            "url": "https://www.infoq.cn/feed",
+            "enabled": true,
+            "category": "china-tech"
+          },
+          {
+            "name": "36氪",
+            "url": "https://36kr.com/feed",
+            "enabled": true,
+            "category": "china-tech"
+          },
+          {
+            "name": "Google News - Artificial Intelligence",
+            "url": "https://news.google.com/rss/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en",
+            "enabled": false,
+            "category": "ai-news"
+          },
+          {
+            "name": "Google News - 人工智能",
+            "url": "https://news.google.com/rss/search?q=人工智能&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "enabled": false,
+            "category": "china-ai"
+          },
+          {
+            "name": "Google News - 大模型",
+            "url": "https://news.google.com/rss/search?q=大模型&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            "enabled": false,
+            "category": "china-ai"
+          }
+        ],
+        "reddit": {
+          "enabled": true,
+          "subreddits": [
+            {
+              "subreddit": "MachineLearning",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 20,
+              "min_score": 30
+            },
+            {
+              "subreddit": "LocalLLaMA",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 20,
+              "min_score": 30
+            },
+            {
+              "subreddit": "artificial",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 15,
+              "min_score": 30
+            }
+          ],
+          "users": [],
+          "fetch_comments": 0
+        },
+        "twitter": {
+          "enabled": false,
+          "users": [
+            "karpathy",
+            "ylecun"
+          ],
+          "fetch_limit": 10,
+          "fetch_reply_text": false,
+          "max_replies_per_tweet": 3,
+          "max_tweets_to_expand": 10,
+          "reply_min_likes": 5
+        },
+        "openbb": {
+          "enabled": false,
+          "fetch_filings": false,
+          "filings_provider": "sec",
+          "watchlists": []
+        },
+        "ossinsight": {
+          "enabled": false,
+          "period": "past_24_hours",
+          "languages": [
+            "All",
+            "Python",
+            "TypeScript"
+          ],
+          "keywords": [
+            "ai",
+            "llm",
+            "agent",
+            "rag",
+            "inference"
+          ],
+          "min_stars": 50,
+          "max_items": 20
+        },
+        "steam": {
+          "enabled": false,
+          "fetch_new_releases": true,
+          "max_items": 30,
+          "country": "US",
+          "language": "english",
+          "category": "steam-new-releases",
+          "min_total_reviews": 0,
+          "min_positive_ratio": null,
+          "include_free": true,
+          "include_early_access": true,
+          "candidate_count": 200,
+          "new_release_window_days": 3
+        }
+      },
+      "filtering": {
+        "ai_score_threshold": 7,
+        "time_window_hours": 24
+      },
+      "summary": {
+        "include_summary": false,
+        "include_cto_takeaway": true,
+        "max_detailed_items": 6,
+        "show_scores": false,
+        "compact_remaining": true,
+        "compact_sentence_limit": 2,
+        "include_bilingual": true,
+        "bilingual_secondary_language": "zh",
+        "cto_takeaway_ai_enabled": true,
+        "cto_takeaway_ai_items": 3,
+        "disclosure": "由 AI 生成，人类审核。"
+      },
+      "prompts": {
+        "analysis_system": "You are an expert content curator helping filter important technical and academic information.\n\nScore content on a 0-10 scale based on importance and relevance:\n\n**9-10: Groundbreaking** - Major breakthroughs, paradigm shifts, or highly significant announcements\n- New major version releases of widely-used technologies\n- Significant research breakthroughs\n- Important industry-changing announcements\n\n**7-8: High Value** - Important developments worth immediate attention\n- Interesting technical deep-dives\n- Novel approaches to known problems\n- Insightful analysis or commentary\n- Valuable tools or libraries\n\n**5-6: Interesting** - Worth knowing but not urgent\n- Incremental improvements\n- Useful tutorials\n- Moderate community interest\n\n**3-4: Low Priority** - Generic or routine content\n- Minor updates\n- Common knowledge\n- Overly promotional content\n\n**0-2: Noise** - Not relevant or low quality\n- Spam or purely promotional\n- Off-topic content\n- Trivial updates\n\nConsider:\n- Technical depth and novelty\n- Potential impact on the field\n- Quality of writing/presentation\n- Relevance to software engineering, AI/ML, and systems research\n- Community discussion quality: insightful comments, diverse viewpoints, and debates increase value\n- Engagement signals: high upvotes/favorites with substantive discussion indicate community-validated importance\n\nTopic:\n- Topic name: AI CTO\n- Description: AI technology briefing for CTOs and engineering leaders.\n- Target audience: CTOs, VP Engineering, platform leaders, and senior AI practitioners.\n- Relevance guardrails: Only score items highly when they are directly about AI/ML, LLMs, AI agents, model releases, AI infrastructure, AI inference/serving, AI developer tools, AI safety/security, AI product/platform changes, or technical research that directly advances or evaluates AI systems.\n- If an item is outside this topic, cap its score at 4 even if it is popular or technically impressive.\n- For a score of 7 or higher, the item must provide concrete value for this topic and target audience.\n",
+        "analysis_user": "Analyze the following content and provide a JSON response with:\n- score (0-10): Importance score\n- reason: Brief explanation for the score (mention discussion quality if comments are provided)\n- summary: One-sentence summary of the content\n- tags: Relevant topic tags (3-5 tags)\n\nContent:\nTitle: {title}\nSource: {source}\nAuthor: {author}\nURL: {url}\nOriginal language: {original_language}\n{content_section}\n{discussion_section}\n\nRespond with valid JSON only:\n{{\n  \"score\": <number>,\n  \"reason\": \"<explanation>\",\n  \"summary\": \"<one-sentence-summary in the original language when possible>\",\n  \"tags\": [\"<tag1>\", \"<tag2>\", ...]\n}}",
+        "concept_system": "You identify technical concepts in news that a reader might not know.\nGiven a news item, return 1-3 search queries for concepts that need explanation.\nFocus on: specific technologies, protocols, algorithms, tools, or projects that are not widely known.\nDo NOT return queries for well-known things (e.g. \"Python\", \"Linux\", \"Google\").\nIf the news is self-explanatory, return an empty list.",
+        "concept_user": "What concepts in this news might need explanation?\n\nTitle: {title}\nSummary: {summary}\nTags: {tags}\nContent: {content}\n\nRespond with valid JSON only:\n{{\n  \"queries\": [\"<search query 1>\", \"<search query 2>\"]\n}}",
+        "enrichment_system": "You are a knowledgeable technical writer who helps readers understand important news in context.\n\nGiven a high-scoring news item, its content, and web search results about the topic, your job is to produce a structured analysis.\n\nProvide EACH text field in BOTH English and Chinese. Use the following key naming convention:\n- title_en / title_zh\n- whats_new_en / whats_new_zh\n- why_it_matters_en / why_it_matters_zh\n- key_details_en / key_details_zh\n- background_en / background_zh\n- community_discussion_en / community_discussion_zh\n\nThe renderer depends on this exact bilingual schema. Return one JSON object\nthat contains both language versions in the same response; do not return\nseparate English and Chinese documents, and do not omit either suffix family.\n\nPreserve source-language fidelity: treat the original title and content as the\nauthoritative source of meaning. The one-line summary may already be translated\nor compressed, so use it only as a weak aid. Avoid translating from a previous\ntranslation when original-language text is available.\n\nField definitions:\n0. **title** (one short phrase, ≤15 words): A clear, accurate headline for the news item.\n\n1. **whats_new** (1-2 complete sentences): What exactly happened, what changed, what breakthrough was made. Be specific — mention names, versions, numbers, dates when available.\n\n2. **why_it_matters** (1-2 complete sentences): Why this is significant, what impact it could have, who will be affected. Connect to the broader ecosystem or industry trends.\n\n3. **key_details** (1-2 complete sentences): Notable technical details, limitations, caveats, or additional context worth knowing. Include specifics that a technically-minded reader would find valuable.\n\n4. **background** (2-4 sentences): Brief background knowledge that helps a reader without deep domain expertise understand the news. Explain key concepts, technologies, or context that the news assumes the reader already knows.\n\n5. **community_discussion** (1-3 sentences): If community comments are provided, summarize the overall sentiment and key viewpoints from the discussion — agreements, disagreements, concerns, additional insights, or notable counterarguments. If no comments are provided, return an empty string.\n\n**CRITICAL — Language rules (MUST follow):**\n- All *_en fields MUST be written in English.\n- All *_zh fields MUST be written in Simplified Chinese (简体中文). 绝对不能用英文写 _zh 字段的内容。Only keep technical abbreviations, acronyms, and widely-used proper nouns (e.g. \"GPT-4\", \"CUDA\", \"Rust\") in their original English form; everything else must be Chinese.\n\nGuidelines:\n- EVERY field (except community_discussion when no comments exist) must contain at least one complete sentence — no field may be empty or contain just a phrase\n- Base your explanation on the provided content and web search results — do NOT fabricate information\n- ONLY explain concepts and terms that are explicitly mentioned in the title, summary, or content\n- Use the web search results to ensure accuracy, especially for recent projects, tools, or events\n- If the news is self-explanatory and needs no background, return an empty string for both background fields\n- For **sources**: pick 1-3 URLs from the Web Search Results that you actually relied on for the background fields. Only use URLs that appear verbatim in the search results above — do not invent or modify URLs.\n",
+        "enrichment_user": "Provide a structured bilingual analysis for the following news item.\n\n**News Item:**\n- Title: {title}\n- URL: {url}\n- Original language: {original_language}\n- One-line summary: {summary}\n- Score: {score}/10\n- Reason: {reason}\n- Tags: {tags}\n\n**Content:**\n{content}\n{comments_section}\n\n**Web Search Results (for grounding):**\n{web_context}\n\nRespond with valid JSON only. Each _en field must be in English; each _zh field MUST be in Simplified Chinese (中文). Every field MUST be at least one complete sentence (except community_discussion fields when no comments exist):\n{{\n  \"title_en\": \"<short headline in English, ≤15 words>\",\n  \"title_zh\": \"<用中文写一个简短标题，不超过15个词>\",\n  \"whats_new_en\": \"<1-2 sentences in English>\",\n  \"whats_new_zh\": \"<用中文写1-2句话>\",\n  \"why_it_matters_en\": \"<1-2 sentences in English>\",\n  \"why_it_matters_zh\": \"<用中文写1-2句话>\",\n  \"key_details_en\": \"<1-2 sentences in English>\",\n  \"key_details_zh\": \"<用中文写1-2句话>\",\n  \"background_en\": \"<2-4 sentences in English, or empty string>\",\n  \"background_zh\": \"<用中文写2-4句话，或空字符串>\",\n  \"community_discussion_en\": \"<1-3 sentences in English, or empty string>\",\n  \"community_discussion_zh\": \"<用中文写1-3句话，或空字符串>\",\n  \"sources\": [\"<url from search results>\", \"...\"]\n}}",
+        "takeaway_system": "You are a CTO advisor writing executive technical takeaways.\n\nYour audience is a CTO or VP Engineering who cares about enterprise technology\nstrategy, architecture, engineering productivity, platform reliability, AI\ninfrastructure cost, security/compliance, vendor strategy, team capability, and\nroadmap decisions.\n\nReturn one JSON object with both English and Simplified Chinese fields:\n- cto_takeaway_en\n- cto_takeaway_zh\n\nRules:\n- Do not merely summarize the article.\n- Translate the news into CTO-relevant implications and possible actions.\n- Mention the business/engineering management angle: cost, risk, governance,\n  staffing, architecture, build-vs-buy, vendor/platform strategy, rollout, or\n  evaluation metrics when relevant.\n- If the item is only weakly relevant to a CTO, say what should be monitored\n  rather than recommending immediate action.\n- Keep each field to 1-2 concise sentences.\n- cto_takeaway_en must be English.\n- cto_takeaway_zh must be Simplified Chinese.",
+        "takeaway_user": "Generate a CTO-oriented takeaway for this selected news item.\n\nActive briefing topic:\n{topic_context}\n\nTitle: {title}\nURL: {url}\nSource: {source}\nTags: {tags}\nScore reason: {reason}\n\nStructured article analysis:\n{analysis}\n\nReturn valid JSON only:\n{{\n  \"cto_takeaway_en\": \"<1-2 CTO-oriented sentences in English>\",\n  \"cto_takeaway_zh\": \"<1-2 句中文 CTO 视角要点>\"\n}}",
+        "topic_dedup_system": "You are a news deduplication assistant. Identify groups of news items that cover the exact same real-world event, release, or announcement.\n\nRules:\n- Group items ONLY if they report on the identical event (same product release, same incident, same announcement)\n- Items about the same product but different events are NOT duplicates (\"Gemma 4 released\" vs \"Gemma 4 jailbroken\")\n- Err on the side of keeping items separate when unsure",
+        "topic_dedup_user": "The following news items have already been sorted by importance score (descending). Identify which items are duplicates of each other.\n\n{items}\n\nReturn a JSON object listing only the groups that contain duplicates (2+ items). Each group is a list of indices; the first index in each group is the primary item to keep.\n\nRespond with valid JSON only:\n{{\n  \"duplicates\": [[<primary_idx>, <dup_idx>, ...], ...]\n}}\n\nIf there are no duplicates at all, return: {{\"duplicates\": []}}",
+        "translation_system": "You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text.",
+        "translation_user": "Title: {title}\nSummary: {summary}\n\nReturn JSON:\n{{\"title_zh\": \"<Chinese title>\", \"summary_zh\": \"<1-2 sentence Chinese summary>\"}}"
+      }
     },
     {
-      "id": "systems",
-      "name": "Systems / Infrastructure",
-      "name_zh": "系统 / 基础设施",
-      "keywords": ["linux", "kernel", "os", "操作系统", "内核", "container", "容器", "kubernetes", "k8s", "docker", "distributed", "分布式", "database", "数据库", "storage", "network", "网络", "performance", "性能"],
-      "sources": [
-        {
-          "type": "rss",
-          "description": "LWN.net — Linux and kernel news",
-          "description_zh": "LWN.net — Linux 与内核新闻",
-          "tags": ["linux", "kernel"],
-          "config": { "name": "LWN.net", "url": "https://lwn.net/headlines/rss", "category": "linux-kernel" }
+      "slug": "gaming",
+      "name": "Gaming Radar",
+      "enabled": true,
+      "title_en": "Gaming Daily",
+      "title_zh": "游戏日报",
+      "description": "Daily briefing for games, covering indie games, AAA/console releases, online/live-service games, Steam ecosystem signals, and game industry moves.",
+      "audience": "Game players, game industry observers, indie developers, publishers, and product/operations teams tracking PC, console, and online games.",
+      "relevance_prompt": "Score highly only when an item is directly about video games or the game industry: notable indie games, AAA/console releases, PC/Steam trends, online/live-service operations, esports or community events with business impact, platform/store policy changes, game development lessons, monetization, publishing, regulation, acquisitions, or player-facing product changes. Cap generic entertainment, hardware, creator drama, broad tech, or culture stories at 4 unless the game connection is explicit and central. Classify useful items into indie, AAA/console, online/live-service, Steam/platform, China games, or industry categories when possible.",
+      "cto_prompt_focus": "Translate gaming news into product, community, platform, monetization, operations, publishing, live-service, technology, and market implications. For developers or studios, highlight risks, opportunities, production lessons, player sentiment, platform dependencies, and go-to-market signals.",
+      "filtering": {
+        "ai_score_threshold": 7,
+        "time_window_hours": 30
+      },
+      "summary": {
+        "disclosure": "由 AI 生成，人类审核。",
+        "include_summary": false,
+        "include_cto_takeaway": true,
+        "max_detailed_items": 6,
+        "show_scores": false,
+        "compact_remaining": true,
+        "compact_sentence_limit": 2,
+        "include_bilingual": true,
+        "bilingual_secondary_language": "en",
+        "cto_takeaway_ai_enabled": true,
+        "cto_takeaway_ai_items": 3,
+        "bilingual_primary_language": "zh"
+      },
+      "sources": {
+        "github": [],
+        "hackernews": {
+          "enabled": false,
+          "fetch_top_stories": 20,
+          "min_score": 100
         },
-        {
-          "type": "reddit_subreddit",
-          "description": "Linux community discussions",
-          "description_zh": "Linux 社区讨论",
-          "tags": ["linux"],
-          "config": { "subreddit": "linux", "sort": "hot", "fetch_limit": 15, "min_score": 100 }
+        "rss": [
+          {
+            "name": "Steam News",
+            "url": "https://store.steampowered.com/feeds/news.xml",
+            "enabled": true,
+            "category": "steam"
+          },
+          {
+            "name": "Steam News Hub",
+            "url": "https://store.steampowered.com/feeds/news/collection/steam",
+            "enabled": true,
+            "category": "steam"
+          },
+          {
+            "name": "PC Gamer",
+            "url": "https://www.pcgamer.com/rss/",
+            "enabled": true,
+            "category": "aaa-console"
+          },
+          {
+            "name": "IGN Games",
+            "url": "https://www.ign.com/rss/articles/feed?tags=games",
+            "enabled": true,
+            "category": "aaa-console"
+          },
+          {
+            "name": "GameSpot News",
+            "url": "https://www.gamespot.com/feeds/news/",
+            "enabled": true,
+            "category": "aaa-console"
+          },
+          {
+            "name": "Rock Paper Shotgun",
+            "url": "https://www.rockpapershotgun.com/feed",
+            "enabled": true,
+            "category": "indie"
+          },
+          {
+            "name": "Eurogamer",
+            "url": "https://www.eurogamer.net/feed",
+            "enabled": true,
+            "category": "aaa-console"
+          },
+          {
+            "name": "VG247",
+            "url": "https://www.vg247.com/feed",
+            "enabled": true,
+            "category": "aaa-console"
+          },
+          {
+            "name": "MassivelyOP",
+            "url": "https://massivelyop.com/feed/",
+            "enabled": true,
+            "category": "online-live-service"
+          },
+          {
+            "name": "Dot Esports",
+            "url": "https://dotesports.com/feed",
+            "enabled": true,
+            "category": "online-live-service"
+          },
+          {
+            "name": "机核 GCORES",
+            "url": "https://www.gcores.com/rss",
+            "enabled": true,
+            "category": "china-games"
+          },
+          {
+            "name": "触乐",
+            "url": "https://www.chuapp.com/feed",
+            "enabled": true,
+            "category": "china-games"
+          },
+          {
+            "name": "游研社",
+            "url": "https://www.yystv.cn/rss/feed",
+            "enabled": true,
+            "category": "china-games"
+          }
+        ],
+        "reddit": {
+          "enabled": true,
+          "subreddits": [
+            {
+              "subreddit": "Games",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 15,
+              "min_score": 200
+            },
+            {
+              "subreddit": "pcgaming",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 15,
+              "min_score": 150
+            },
+            {
+              "subreddit": "IndieGaming",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 10,
+              "min_score": 80
+            },
+            {
+              "subreddit": "MMORPG",
+              "enabled": true,
+              "sort": "hot",
+              "time_filter": "day",
+              "fetch_limit": 10,
+              "min_score": 80
+            }
+          ],
+          "users": [],
+          "fetch_comments": 2
         },
-        {
-          "type": "rss",
-          "description": "Brendan Gregg's blog — performance and systems",
-          "description_zh": "Brendan Gregg 博客 — 性能与系统",
-          "tags": ["performance", "systems"],
-          "config": { "name": "Brendan Gregg", "url": "https://www.brendangregg.com/blog/rss.xml", "category": "systems" }
+        "telegram": {
+          "enabled": false,
+          "channels": []
         },
-        {
-          "type": "github_user",
-          "description": "Linus Torvalds — Linux creator",
-          "description_zh": "Linus Torvalds — Linux 之父",
-          "tags": ["linux", "kernel"],
-          "config": { "username": "torvalds" }
+        "twitter": {
+          "enabled": false,
+          "users": [],
+          "fetch_limit": 10,
+          "fetch_reply_text": false,
+          "max_replies_per_tweet": 3,
+          "max_tweets_to_expand": 10,
+          "reply_min_likes": 5
+        },
+        "openbb": {
+          "enabled": false,
+          "fetch_filings": false,
+          "filings_provider": "sec",
+          "watchlists": []
+        },
+        "ossinsight": {
+          "enabled": false,
+          "period": "past_24_hours",
+          "languages": [
+            "All"
+          ],
+          "keywords": [],
+          "min_stars": 5,
+          "max_items": 30
+        },
+        "steam": {
+          "enabled": true,
+          "fetch_new_releases": true,
+          "max_items": 30,
+          "country": "US",
+          "language": "english",
+          "category": "steam-new-releases",
+          "min_total_reviews": 20,
+          "min_positive_ratio": null,
+          "include_free": true,
+          "include_early_access": true,
+          "candidate_count": 200,
+          "new_release_window_days": 7
         }
-      ]
-    },
-    {
-      "id": "security",
-      "name": "Security / Privacy",
-      "name_zh": "安全 / 隐私",
-      "keywords": ["security", "安全", "vulnerability", "漏洞", "exploit", "cve", "privacy", "隐私", "cryptography", "密码学", "malware", "恶意软件", "pentest", "渗透测试", "reverse engineering", "逆向"],
-      "sources": [
-        {
-          "type": "reddit_subreddit",
-          "description": "Netsec — information security community",
-          "description_zh": "Netsec — 信息安全社区",
-          "tags": ["security"],
-          "config": { "subreddit": "netsec", "sort": "hot", "fetch_limit": 15, "min_score": 50 }
-        },
-        {
-          "type": "rss",
-          "description": "Krebs on Security — investigative security journalism",
-          "description_zh": "Krebs on Security — 安全调查报道",
-          "tags": ["security", "journalism"],
-          "config": { "name": "Krebs on Security", "url": "https://krebsonsecurity.com/feed/", "category": "security" }
-        },
-        {
-          "type": "rss",
-          "description": "Schneier on Security — security analysis and commentary",
-          "description_zh": "Schneier on Security — 安全分析与评论",
-          "tags": ["security", "analysis"],
-          "config": { "name": "Schneier on Security", "url": "https://www.schneier.com/feed/atom/", "category": "security" }
-        }
-      ]
-    },
-    {
-      "id": "webdev",
-      "name": "Web Development",
-      "name_zh": "Web 开发",
-      "keywords": ["web", "frontend", "前端", "backend", "后端", "javascript", "typescript", "react", "vue", "node", "css", "html", "fullstack", "全栈", "api", "rest", "graphql"],
-      "sources": [
-        {
-          "type": "reddit_subreddit",
-          "description": "Web development community",
-          "description_zh": "Web 开发社区",
-          "tags": ["web", "frontend", "backend"],
-          "config": { "subreddit": "webdev", "sort": "hot", "fetch_limit": 15, "min_score": 80 }
-        },
-        {
-          "type": "reddit_subreddit",
-          "description": "JavaScript discussions and news",
-          "description_zh": "JavaScript 讨论与新闻",
-          "tags": ["javascript"],
-          "config": { "subreddit": "javascript", "sort": "hot", "fetch_limit": 10, "min_score": 60 }
-        },
-        {
-          "type": "rss",
-          "description": "CSS-Tricks — frontend tips and techniques",
-          "description_zh": "CSS-Tricks — 前端技巧与技术",
-          "tags": ["css", "frontend"],
-          "config": { "name": "CSS-Tricks", "url": "https://css-tricks.com/feed/", "category": "frontend" }
-        }
-      ]
-    },
-    {
-      "id": "pl",
-      "name": "Programming Languages / Compilers",
-      "name_zh": "编程语言 / 编译器",
-      "keywords": ["programming language", "编程语言", "compiler", "编译器", "rust", "go", "zig", "haskell", "ocaml", "type system", "类型系统", "llvm", "wasm", "webassembly", "functional", "函数式"],
-      "sources": [
-        {
-          "type": "reddit_subreddit",
-          "description": "Programming language design and theory",
-          "description_zh": "编程语言设计与理论",
-          "tags": ["pl", "theory"],
-          "config": { "subreddit": "ProgrammingLanguages", "sort": "hot", "fetch_limit": 15, "min_score": 30 }
-        },
-        {
-          "type": "reddit_subreddit",
-          "description": "Rust programming community",
-          "description_zh": "Rust 编程社区",
-          "tags": ["rust"],
-          "config": { "subreddit": "rust", "sort": "hot", "fetch_limit": 15, "min_score": 60 }
-        },
-        {
-          "type": "github_repo",
-          "description": "Rust language releases",
-          "description_zh": "Rust 语言版本发布",
-          "tags": ["rust"],
-          "config": { "owner": "rust-lang", "repo": "rust" }
-        },
-        {
-          "type": "github_repo",
-          "description": "Zig language releases",
-          "description_zh": "Zig 语言版本发布",
-          "tags": ["zig"],
-          "config": { "owner": "ziglang", "repo": "zig" }
-        }
-      ]
-    },
-    {
-      "id": "embedded",
-      "name": "Embedded / Robotics / Hardware",
-      "name_zh": "嵌入式 / 机器人 / 硬件",
-      "keywords": ["embedded", "嵌入式", "robotics", "机器人", "iot", "物联网", "arduino", "raspberry pi", "rtos", "fpga", "risc-v", "hardware", "硬件", "具身智能", "embodied"],
-      "sources": [
-        {
-          "type": "reddit_subreddit",
-          "description": "Robotics research and projects",
-          "description_zh": "机器人研究与项目",
-          "tags": ["robotics"],
-          "config": { "subreddit": "robotics", "sort": "hot", "fetch_limit": 15, "min_score": 30 }
-        },
-        {
-          "type": "reddit_subreddit",
-          "description": "Embedded systems development",
-          "description_zh": "嵌入式系统开发",
-          "tags": ["embedded"],
-          "config": { "subreddit": "embedded", "sort": "hot", "fetch_limit": 15, "min_score": 30 }
-        },
-        {
-          "type": "rss",
-          "description": "Hackaday — hardware hacking and projects",
-          "description_zh": "Hackaday — 硬件创客与项目",
-          "tags": ["hardware", "maker"],
-          "config": { "name": "Hackaday", "url": "https://hackaday.com/feed/", "category": "hardware" }
-        }
-      ]
-    },
-    {
-      "id": "devtools",
-      "name": "Open Source / DevTools",
-      "name_zh": "开源 / 开发工具",
-      "keywords": ["open source", "开源", "devtools", "开发工具", "cli", "terminal", "终端", "editor", "编辑器", "vim", "neovim", "emacs", "vscode", "git", "ci/cd", "devops"],
-      "sources": [
-        {
-          "type": "rss",
-          "description": "GitHub Trending — daily popular repositories",
-          "description_zh": "GitHub Trending — 每日热门仓库",
-          "tags": ["github", "trending"],
-          "config": { "name": "GitHub Trending - Daily", "url": "https://mshibanami.github.io/GitHubTrendingRSS/daily/all.xml", "category": "github-trending" }
-        },
-        {
-          "type": "reddit_subreddit",
-          "description": "Command line tools and tips",
-          "description_zh": "命令行工具与技巧",
-          "tags": ["cli", "terminal"],
-          "config": { "subreddit": "commandline", "sort": "hot", "fetch_limit": 10, "min_score": 40 }
-        },
-        {
-          "type": "github_repo",
-          "description": "Neovim editor releases",
-          "description_zh": "Neovim 编辑器版本发布",
-          "tags": ["editor", "neovim"],
-          "config": { "owner": "neovim", "repo": "neovim" }
-        }
-      ]
-    },
-    {
-      "id": "science",
-      "name": "Science / Research",
-      "name_zh": "科学 / 学术研究",
-      "keywords": ["science", "科学", "research", "研究", "paper", "论文", "arxiv", "physics", "物理", "math", "数学", "biology", "生物", "chemistry", "化学", "neuroscience", "神经科学"],
-      "sources": [
-        {
-          "type": "reddit_subreddit",
-          "description": "Science news and discussions",
-          "description_zh": "科学新闻与讨论",
-          "tags": ["science", "general"],
-          "config": { "subreddit": "science", "sort": "hot", "fetch_limit": 15, "min_score": 200 }
-        },
-        {
-          "type": "rss",
-          "description": "Nature — latest research highlights",
-          "description_zh": "Nature — 最新研究亮点",
-          "tags": ["research", "journal"],
-          "config": { "name": "Nature", "url": "https://www.nature.com/nature.rss", "category": "science" }
-        },
-        {
-          "type": "rss",
-          "description": "Quanta Magazine — accessible science journalism",
-          "description_zh": "Quanta Magazine — 通俗科学报道",
-          "tags": ["science", "journalism"],
-          "config": { "name": "Quanta Magazine", "url": "https://api.quantamagazine.org/feed/", "category": "science" }
-        }
-      ]
+      },
+      "prompts": {
+        "analysis_system": "You are an expert game-industry editor curating a daily games briefing.\n\nScore content on a 0-10 scale based on game relevance, signal quality, and usefulness to readers tracking indie games, AAA/console games, online/live-service games, Steam/platform trends, and the broader game business.\n\n9-10: Must-cover industry signal\n- A major game launch, expansion, delay, cancellation, platform policy shift, studio/publisher move, acquisition, regulation, or monetization change with broad industry impact.\n- Strong quantitative signal: Steam CCU/wishlist/sales ranking, review volume and sentiment, revenue or player-count milestones, retention/live-ops data, esports/community scale, or cross-platform adoption.\n- A game or studio that is clearly becoming a market, design, production, or community phenomenon.\n\n7-8: High-value games coverage\n- Notable indie, AAA, online, or Chinese-market games with clear quality, audience, commercial, or design signals.\n- Substantive reviews, previews, postmortems, developer talks, patch/live-ops analysis, platform/store changes, or community sentiment that explain why a game matters.\n- Meaningful Steam, console, mobile, or live-service data that helps assess traction, quality, pricing, monetization, or player reception.\n\n5-6: Useful but secondary\n- Smaller announcements, trailers, patches, events, interviews, or opinion pieces with some concrete information but limited evidence of scale or lasting relevance.\n- Niche games worth tracking but without strong quality, data, market, or community signal yet.\n\n3-4: Low priority\n- Routine marketing beats, minor patches, generic listicles, thin rumor posts, creator drama, entertainment news, or hardware/tech stories where the game connection is weak.\n\n0-2: Noise\n- Spam, duplicated promotions, non-game content, generic tech/culture items, or stories that do not help readers understand games or the game industry.\n\nEvaluation guidelines:\n- Prefer concrete evidence over hype: Steam charts, review counts/sentiment, player counts, sales ranks, critical reception, community discussion quality, developer credibility, publisher/platform involvement, and observable player behavior.\n- For indie games, value originality, execution quality, player reception, festival/demo momentum, creator credibility, and Steam/community traction.\n- For AAA/console games, value production scale, franchise/platform impact, review consensus, launch performance, delays, business model changes, and strategic implications.\n- For online/live-service games, value retention, monetization, balance/meta changes, content cadence, esports/community health, churn risks, and operational lessons.\n- For China games, value market signal, regulatory/platform context, domestic player reception, global expansion potential, and production/business model lessons.\n- Cap off-topic but popular stories at 4. Popularity alone is not enough for 7+ unless it is tied to clear game-industry relevance and evidence.",
+        "analysis_user": "Analyze the following game news item and provide a JSON response.\n\nEvaluate it for a games briefing, not a generic technology briefing. Consider concrete game-industry signals such as game scale, production quality, player or critic reception, Steam/player data, platform impact, monetization/live-ops implications, community sentiment, studio/publisher significance, and relevance to indie, AAA/console, online/live-service, Steam/platform, China games, or industry/business categories.\n\nTitle: {title}\nURL: {url}\nSource: {source}\nAuthor: {author}\nPublished: {published_at}\nOriginal language: {original_language}\n{content_section}\n{discussion_section}\n\nRespond with valid JSON only:\n{{\n  \"score\": <number>,\n  \"reason\": \"<brief explanation focused on game-industry signal and evidence>\",\n  \"summary\": \"<one-sentence game-news summary in the original language when possible>\",\n  \"tags\": [\"<tag1>\", \"<tag2>\", \"...\"]\n}}",
+        "concept_system": "You identify game-industry concepts in news that a reader might need explained.\nGiven a game news item, return 1-3 search queries for context that would help explain the item's significance.\nFocus on: specific games, studios, publishers, genres, engines, storefronts, platforms, monetization models, live-service mechanics, esports/community terms, review/Steam metrics, or market/regulatory context.\nDo NOT return queries for universally known things unless the article depends on a specific current event or data point about them (for example, Steam is too broad, but Steam CCU record for a named game is useful).\nIf the item is self-explanatory, return an empty list.",
+        "concept_user": "What game-industry concepts, entities, or data signals in this news might need explanation?\n\nTitle: {title}\nSummary: {summary}\nTags: {tags}\nContent: {content}\n\nRespond with valid JSON only:\n{{\n  \"queries\": [\"<search query 1>\", \"<search query 2>\"]\n}}",
+        "enrichment_system": "You are a knowledgeable game-industry analyst helping readers understand important game news in context.\n\nGiven a high-scoring game news item, its content, and web search results about the topic, produce a structured bilingual analysis.\n\nProvide EACH text field in BOTH English and Simplified Chinese. Use the following key naming convention:\n- title_en / title_zh\n- whats_new_en / whats_new_zh\n- why_it_matters_en / why_it_matters_zh\n- key_details_en / key_details_zh\n- background_en / background_zh\n- community_discussion_en / community_discussion_zh\n\nThe renderer depends on this exact bilingual schema. Return one JSON object that contains both language versions in the same response; do not return separate English and Chinese documents, and do not omit either suffix family.\n\nPreserve source-language fidelity: treat the original title and content as the authoritative source of meaning. The one-line summary may already be translated or compressed, so use it only as a weak aid.\n\nField definitions:\n0. title: one short, accurate headline for the game news item.\n1. whats_new: What exactly happened: launch, update, review result, Steam/player data, delay, platform change, studio move, live-ops event, monetization change, or community development. Mention names, dates, numbers, platforms, and regions when available.\n2. why_it_matters: Explain the significance for players, developers, publishers, platforms, live-service operators, indie studios, or the wider game market. Prefer concrete scale, quality, reception, or business implications over hype.\n3. key_details: Include useful specifics such as Steam rank/CCU/review sentiment, price/business model, platform availability, genre, studio/publisher, patch details, launch quality, content cadence, player complaints, or important caveats.\n4. background: Briefly explain the game, studio, genre, platform, business model, or market context needed to understand the news. Keep it grounded in the article and web results.\n5. community_discussion: If comments are provided, summarize player/developer/community sentiment, disagreements, concerns, praise, or notable operational lessons. If no comments are provided, return an empty string.\n\nLanguage rules:\n- All *_en fields must be written in English.\n- All *_zh fields must be written in Simplified Chinese. Keep official game/studio names, acronyms, and platform names in their common form when appropriate.\n\nGuidelines:\n- Do not force a generic technology-news framing. Games matter through audience scale, quality, reception, cultural momentum, business impact, platform effects, design lessons, and operations.\n- Base the explanation on the provided content and web search results; do not fabricate statistics or review sentiment.\n- If data is absent, say what signal is missing rather than inventing it.\n- For sources, pick 1-3 URLs from the Web Search Results that you actually relied on. Only use URLs that appear verbatim in the search results.\n- For Steam items, if the content or metadata includes 'Steam official Chinese name', use that exact official Chinese title in title_zh and Chinese text. Do not invent or literally translate a different Chinese game title.",
+        "enrichment_user": "Provide a structured bilingual game-industry analysis for the following news item.\n\nNews Item:\n- Title: {title}\n- URL: {url}\n- Original language: {original_language}\n- One-line summary: {summary}\n- Score: {score}/10\n- Reason: {reason}\n- Tags: {tags}\n\nContent:\n{content}\n{comments_section}\n\nWeb Search Results (for grounding):\n{web_context}\n\nRespond with valid JSON only. Each _en field must be in English; each _zh field must be in Simplified Chinese. Every field must be at least one complete sentence except community_discussion fields when no comments exist:\n{{\n  \"title_en\": \"<short headline in English, <=15 words>\",\n  \"title_zh\": \"<short headline in Simplified Chinese, <=15 words>\",\n  \"whats_new_en\": \"<1-2 sentences in English>\",\n  \"whats_new_zh\": \"<1-2 sentences in Simplified Chinese>\",\n  \"why_it_matters_en\": \"<1-2 sentences in English>\",\n  \"why_it_matters_zh\": \"<1-2 sentences in Simplified Chinese>\",\n  \"key_details_en\": \"<1-2 sentences in English>\",\n  \"key_details_zh\": \"<1-2 sentences in Simplified Chinese>\",\n  \"background_en\": \"<2-4 sentences in English, or empty string>\",\n  \"background_zh\": \"<2-4 sentences in Simplified Chinese, or empty string>\",\n  \"community_discussion_en\": \"<1-3 sentences in English, or empty string>\",\n  \"community_discussion_zh\": \"<1-3 sentences in Simplified Chinese, or empty string>\",\n  \"sources\": [\"<url from search results>\", \"...\"]\n}}",
+        "takeaway_system": "You are a game-news editor writing concise highlight bullets for a daily games briefing.\n\nYour audience wants a quick sense of why each selected item is worth attention across indie games, AAA/console games, online/live-service games, Steam/platform trends, China games, and game business.\n\nReturn one JSON object with both English and Simplified Chinese fields:\n- cto_takeaway_en\n- cto_takeaway_zh\n\nRules:\n- Write it as a highlight digest, not an executive strategy memo.\n- Do not merely repeat the headline; explain the most interesting signal in plain language.\n- Focus on what stands out: game scale, quality/review signal, Steam or player data, player sentiment, content/update significance, launch momentum, platform impact, monetization/live-ops signal, or industry buzz.\n- It is fine to say why players, developers, publishers, or industry watchers may care, but avoid forced recommendations or management language.\n- Keep each field to 1 concise sentence, or 2 very short sentences if needed.\n- cto_takeaway_en must be English.\n- cto_takeaway_zh must be Simplified Chinese.",
+        "takeaway_user": "Generate a short game-news highlight for this selected item.\n\nActive briefing topic:\n{topic_context}\n\nTitle: {title}\nURL: {url}\nSource: {source}\nTags: {tags}\nScore reason: {reason}\n\nStructured article analysis:\n{analysis}\n\nReturn valid JSON only:\n{{\n  \"cto_takeaway_en\": \"<1 concise highlight sentence in English>\",\n  \"cto_takeaway_zh\": \"<1句中文亮点速递>\"\n}}",
+        "topic_dedup_system": "You are a game-news deduplication assistant. Identify groups of news items that cover the same real-world game event, release, update, review wave, data milestone, studio/publisher move, platform policy change, or live-service incident.\n\nRules:\n- Group items only if they report on the same underlying event or announcement.\n- Items about the same game but different events are not duplicates (for example, launch trailer vs review roundup vs first-week Steam CCU milestone may be separate if each adds a distinct signal).\n- Keep separate items when one provides materially different data, review consensus, business context, or community reaction.\n- Err on the side of keeping items separate when unsure.",
+        "topic_dedup_user": "The following game-news items have already been sorted by importance score descending. Identify which items are duplicates of each other.\n\n{items}\n\nReturn a JSON object listing only the groups that contain duplicates (2+ items). Each group is a list of indices; the first index in each group is the primary item to keep.\n\nRespond with valid JSON only:\n{{\n  \"duplicates\": [[<primary_idx>, <dup_idx>, ...], ...]\n}}\n\nIf there are no duplicates at all, return: {{\"duplicates\": []}}",
+        "translation_system": "You are a game-news translator. Translate to Simplified Chinese while preserving official game titles, studio names, platform names, abbreviations, and common English proper nouns when that is the natural industry usage. For Steam games, if an official Chinese title is provided in the title, summary, or metadata, use that exact title and do not retranslate it. Return only valid JSON, no other text.",
+        "translation_user": "Title: {title}\nSummary: {summary}\n\nIf the text contains a Steam official Chinese name, use it exactly for title_zh.\n\nReturn JSON:\n{{\"title_zh\": \"<Chinese title, using official Chinese game title when available>\", \"summary_zh\": \"<1-2 sentence Chinese game-news summary>\"}}"
+      }
     }
   ]
 }

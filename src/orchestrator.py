@@ -19,6 +19,7 @@ from .scrapers.rss import RSSScraper
 from .scrapers.reddit import RedditScraper
 from .scrapers.telegram import TelegramScraper
 from .scrapers.twitter import TwitterScraper
+from .scrapers.steam import SteamScraper
 from .scrapers.openbb import OpenBBScraper
 from .scrapers.ossinsight import OSSInsightScraper
 from .ai.client import create_ai_client, TracedAIClient
@@ -27,6 +28,7 @@ from .ai.summarizer import DailySummarizer
 from .ai.enricher import ContentEnricher
 from .ai.tokens import get_usage_snapshot
 from .storage.artifacts import ArtifactStore, ai_trace_context
+from .publishers.wechat import WeChatPublishError, WeChatPublisher
 
 
 class AICTODailyOrchestrator:
@@ -39,7 +41,9 @@ class AICTODailyOrchestrator:
             config: Application configuration
             storage: Storage manager
         """
-        self.config = config
+        self.root_config = config
+        self.topic = config.get_active_topic()
+        self.config = config.scoped_to_active_topic()
         self.storage = storage
         self.console = Console()
         self.email_manager = EmailManager(config.email, console=self.console) if config.email else None
@@ -49,6 +53,18 @@ class AICTODailyOrchestrator:
             else None
         )
         self.artifact_store = ArtifactStore.from_config(config.artifacts)
+        if self.artifact_store:
+            self.artifact_store.write_json(
+                "meta.json",
+                {
+                    "run_id": self.artifact_store.run_id,
+                    "created_at": self.artifact_store._utc_now(),
+                    "cache_ai_calls": self.artifact_store.cache_ai_calls,
+                    "replay_ai_calls": self.artifact_store.replay_ai_calls,
+                    "topic_slug": self.topic.slug,
+                    "topic_name": self.topic.name,
+                },
+            )
 
     async def run(self, force_hours: int = None) -> None:
         """Execute the complete workflow.
@@ -56,7 +72,9 @@ class AICTODailyOrchestrator:
         Args:
             force_hours: Optional override for time window in hours
         """
-        self.console.print("[bold cyan]AI CTO Daily - Starting aggregation...[/bold cyan]\n")
+        self.console.print(
+            f"[bold cyan]{self.topic.name} - Starting aggregation...[/bold cyan]\n"
+        )
 
         # Check email subscriptions if configured
         if (
@@ -141,11 +159,16 @@ class AICTODailyOrchestrator:
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             summary_paths: List[Tuple[str, Path]] = []
             for lang in self.config.ai.languages:
-                summarizer = DailySummarizer(self.config.summary)
+                summarizer = DailySummarizer(self.config.summary, topic=self.topic)
                 summary = await summarizer.generate_summary(important_items, today, len(all_items), language=lang)
 
                 # Save to data/summaries/
-                summary_path = self.storage.save_daily_summary(today, summary, language=lang)
+                summary_path = self.storage.save_daily_summary(
+                    today,
+                    summary,
+                    language=lang,
+                    topic_slug=self.topic.slug,
+                )
                 summary_paths.append((lang, summary_path))
                 self.console.print(f"💾 Saved {lang.upper()} summary to: {summary_path}\n")
                 self._save_summary_artifact(lang, summary)
@@ -201,6 +224,7 @@ class AICTODailyOrchestrator:
                         summarizer=summarizer,
                     )
 
+            await self._create_wechat_draft_after_run(summary_paths)
             self._send_wechat_review_reminder(
                 date=today,
                 summary_paths=summary_paths,
@@ -264,7 +288,8 @@ class AICTODailyOrchestrator:
             f"AI CTO Daily for {date} is ready for WeChat review.\n\n"
             f"Selected {important_count} important items from {all_items_count} fetched items.\n"
             f"WeChat mode in config: {wechat_config.publish_mode}\n\n"
-            f"Open the Web console to preview or create a WeChat draft:\n"
+            f"WeChat auto draft on run: {wechat_config.auto_create_draft_on_run}\n\n"
+            f"Open the WeChat Official Account backend to review the draft, or use the Web console for preview/debugging:\n"
             f"{wechat_config.review_url}\n\n"
             f"Generated summaries:\n{summaries}\n\n"
             "Direct WeChat publishing may be unavailable for personal Official Accounts. "
@@ -277,6 +302,57 @@ class AICTODailyOrchestrator:
             body,
             recipients,
         )
+
+    async def _create_wechat_draft_after_run(
+        self,
+        summary_paths: List[Tuple[str, Path]],
+    ) -> None:
+        wechat_config = self.config.publishing.wechat
+        if not wechat_config.enabled or not wechat_config.auto_create_draft_on_run:
+            return
+
+        if not summary_paths:
+            self.console.print(
+                "[yellow]WeChat auto draft is enabled, but no summary file was generated.[/yellow]"
+            )
+            return
+
+        lang, summary_path = summary_paths[0]
+        try:
+            markdown_text = summary_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            self.console.print(
+                f"[yellow]WeChat auto draft skipped: could not read {summary_path}: {exc}[/yellow]"
+            )
+            return
+
+        mode = wechat_config.publish_mode
+        action = "publishing" if mode == "publish" else "creating draft"
+        self.console.print(
+            f"WeChat auto {action} from {lang.upper()} summary: {summary_path.name}"
+        )
+
+        try:
+            record_dir = Path("data") / "publishing" / "wechat"
+            async with WeChatPublisher(wechat_config, root_dir=Path(".")) as publisher:
+                result = await publisher.publish_markdown(
+                    markdown_text,
+                    record_dir=record_dir,
+                    mode=mode,
+                )
+            if result.mode == "publish":
+                self.console.print(
+                    f"[green]WeChat draft created and submitted.[/green] "
+                    f"media_id={result.media_id} publish_id={result.publish_id}"
+                )
+            else:
+                self.console.print(
+                    f"[green]WeChat draft created.[/green] media_id={result.media_id}"
+                )
+        except WeChatPublishError as exc:
+            self.console.print(f"[yellow]WeChat auto draft failed: {exc}[/yellow]")
+        except Exception as exc:
+            self.console.print(f"[yellow]WeChat auto draft failed: {exc}[/yellow]")
 
     def _determine_time_window(self, force_hours: int = None) -> datetime:
         if force_hours:
@@ -349,6 +425,11 @@ class AICTODailyOrchestrator:
                 twitter_scraper = TwitterScraper(self.config.sources.twitter, client)
                 tasks.append(self._fetch_with_progress("Twitter", twitter_scraper, since))
 
+            # Steam Store new releases
+            if self.config.sources.steam and self.config.sources.steam.enabled:
+                steam_scraper = SteamScraper(self.config.sources.steam, client)
+                tasks.append(self._fetch_with_progress("Steam", steam_scraper, since))
+
             # OpenBB (financial news / filings via the OpenBB Platform SDK)
             if self.config.sources.openbb and self.config.sources.openbb.enabled:
                 openbb_scraper = OpenBBScraper(self.config.sources.openbb, client)
@@ -409,6 +490,9 @@ class AICTODailyOrchestrator:
             return f"@{meta['channel']}"
         if meta.get("period") and meta.get("repo"):
             return f"ossinsight:{meta.get('primary_language', 'all')}"
+        if meta.get("steam_appid"):
+            category = meta.get("category") or "steam"
+            return f"{category}:{meta['steam_appid']}"
         if meta.get("repo"):
             return meta["repo"]
         if meta.get("watchlist"):
@@ -486,7 +570,7 @@ class AICTODailyOrchestrator:
         if len(items) <= 1:
             return items
 
-        from .ai.prompts import TOPIC_DEDUP_SYSTEM, TOPIC_DEDUP_USER
+        from .ai.prompts import TOPIC_DEDUP_SYSTEM, TOPIC_DEDUP_USER, get_prompt
         from .ai.utils import parse_json_response
 
         # Build the item list for the prompt
@@ -501,8 +585,8 @@ class AICTODailyOrchestrator:
             ai_client = self._create_ai_client()
             with ai_trace_context(stage="topic_dedup", item_count=len(items)):
                 response = await ai_client.complete(
-                    system=TOPIC_DEDUP_SYSTEM,
-                    user=TOPIC_DEDUP_USER.format(items=items_text),
+                    system=get_prompt(self.topic, "topic_dedup_system", TOPIC_DEDUP_SYSTEM),
+                    user=get_prompt(self.topic, "topic_dedup_user", TOPIC_DEDUP_USER).format(items=items_text),
                 )
             result = parse_json_response(response)
             if result is None:
@@ -592,7 +676,7 @@ class AICTODailyOrchestrator:
             f"   Re-analyzing {len(expanded)} Twitter items with reply context...\n"
         )
         ai_client = self._create_ai_client()
-        analyzer = ContentAnalyzer(ai_client)
+        analyzer = ContentAnalyzer(ai_client, topic=self.topic)
         await analyzer.analyze_batch(expanded)
 
     async def _enrich_important_items(self, items: List[ContentItem]) -> None:
@@ -609,7 +693,7 @@ class AICTODailyOrchestrator:
 
         self.console.print("📚 Enriching with background knowledge...")
         ai_client = self._create_ai_client()
-        enricher = ContentEnricher(ai_client)
+        enricher = ContentEnricher(ai_client, topic=self.topic)
         await enricher.enrich_batch(items)
         self.console.print(f"   Enriched {len(items)} items\n")
 
@@ -625,7 +709,7 @@ class AICTODailyOrchestrator:
         target_count = min(max_items, len(items))
         self.console.print(f"🧭 Generating CTO takeaways for top {target_count} items...")
         ai_client = self._create_ai_client()
-        enricher = ContentEnricher(ai_client)
+        enricher = ContentEnricher(ai_client, topic=self.topic)
         await enricher.generate_cto_takeaways(items, max_items=max_items)
         self.console.print(f"   Generated CTO takeaways for {target_count} items\n")
 
@@ -641,7 +725,7 @@ class AICTODailyOrchestrator:
         self.console.print("🤖 Analyzing content with AI...")
 
         ai_client = self._create_ai_client()
-        analyzer = ContentAnalyzer(ai_client)
+        analyzer = ContentAnalyzer(ai_client, topic=self.topic)
 
         return await analyzer.analyze_batch(items)
 
@@ -665,6 +749,7 @@ class AICTODailyOrchestrator:
         """
         self.console.print("📝 Generating daily summary...")
 
-        summarizer = DailySummarizer(self.config.summary)
+        summarizer = DailySummarizer(self.config.summary, topic=self.topic)
 
         return await summarizer.generate_summary(items, date, total_fetched, language=language)
+

@@ -36,6 +36,7 @@ from ..publishers.wechat_renderer import (
 )
 from ..storage.manager import ConfigError, StorageManager, _expand_env_vars
 from ..services.scheduler import PipelineScheduler, start_blocking_cli_job
+from ..ai import prompts as default_prompts
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +54,7 @@ class WebJob:
     command: list[str]
     created_at: str
     log_path: Path
+    topic_slug: str | None = None
     status: str = "running"
     returncode: int | None = None
     finished_at: str | None = None
@@ -62,7 +64,7 @@ class WebJob:
 JOBS: dict[str, WebJob] = {}
 JOBS_LOCK = threading.Lock()
 SCHEDULER_LOCK = threading.Lock()
-SCHEDULER: PipelineScheduler | None = None
+SCHEDULERS: dict[str, PipelineScheduler] = {}
 
 
 def _utc_now() -> str:
@@ -79,6 +81,49 @@ def _load_config_raw() -> str:
     if not CONFIG_PATH.exists():
         return "{}\n"
     return CONFIG_PATH.read_text(encoding="utf-8-sig")
+
+
+PROMPT_DEFAULTS: dict[str, str] = {
+    "analysis_system": default_prompts.build_content_analysis_system(),
+    "analysis_user": default_prompts.CONTENT_ANALYSIS_USER,
+    "concept_system": default_prompts.CONCEPT_EXTRACTION_SYSTEM,
+    "concept_user": default_prompts.CONCEPT_EXTRACTION_USER,
+    "enrichment_system": default_prompts.CONTENT_ENRICHMENT_SYSTEM,
+    "enrichment_user": default_prompts.CONTENT_ENRICHMENT_USER,
+    "takeaway_system": default_prompts.CTO_TAKEAWAY_SYSTEM,
+    "takeaway_user": default_prompts.CTO_TAKEAWAY_USER,
+    "topic_dedup_system": default_prompts.TOPIC_DEDUP_SYSTEM,
+    "topic_dedup_user": default_prompts.TOPIC_DEDUP_USER,
+    "translation_system": default_prompts.TRANSLATION_FALLBACK_SYSTEM,
+    "translation_user": default_prompts.TRANSLATION_FALLBACK_USER,
+}
+
+
+def _fill_default_prompts_for_editor(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a config copy with empty topic prompts expanded for editing."""
+    data = json.loads(json.dumps(data))
+    for topic in data.get("topics", []) or []:
+        if not isinstance(topic, dict):
+            continue
+        prompts = topic.setdefault("prompts", {})
+        if not isinstance(prompts, dict):
+            prompts = {}
+            topic["prompts"] = prompts
+        topic_defaults = dict(PROMPT_DEFAULTS)
+        try:
+            topic_model = Config.model_validate({**data, "active_topic": topic.get("slug")}).get_active_topic()
+            topic_defaults["analysis_system"] = default_prompts.build_content_analysis_system(topic_model)
+        except Exception:
+            pass
+        for key, value in topic_defaults.items():
+            if not prompts.get(key):
+                prompts[key] = value
+    return data
+
+
+def _config_text_for_editor() -> str:
+    data = _parse_config_text(_load_config_raw())
+    return json.dumps(_fill_default_prompts_for_editor(data), indent=2, ensure_ascii=False) + "\n"
 
 
 def _parse_config_text(text: str) -> dict[str, Any]:
@@ -119,6 +164,7 @@ def _job_payload(job: WebJob) -> dict[str, Any]:
         "finished_at": job.finished_at,
         "command": job.command,
         "log_path": str(job.log_path),
+        "topic": job.topic_slug,
     }
 
 
@@ -132,11 +178,13 @@ def _safe_child(root: Path, raw: str) -> Path:
     return path
 
 
-def _list_summaries() -> list[dict[str, Any]]:
+def _list_summaries(topic_slug: str | None = None) -> list[dict[str, Any]]:
     if not SUMMARIES_DIR.exists():
         return []
     items = []
     for path in sorted(SUMMARIES_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if topic_slug and not path.name.startswith(f"{topic_slug}-"):
+            continue
         stat = path.stat()
         items.append(
             {
@@ -149,12 +197,22 @@ def _list_summaries() -> list[dict[str, Any]]:
     return items
 
 
-def _list_artifact_runs() -> list[dict[str, Any]]:
+def _list_artifact_runs(topic_slug: str | None = None) -> list[dict[str, Any]]:
     if not ARTIFACT_RUNS_DIR.exists():
         return []
     items = []
     for path in sorted(ARTIFACT_RUNS_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if not path.is_dir() or not path.name.startswith("run-"):
+            continue
+        meta_path = path / "meta.json"
+        meta: dict[str, Any] = {}
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                meta = {}
+        run_topic = meta.get("topic_slug")
+        if topic_slug and run_topic and run_topic != topic_slug:
             continue
         stages_dir = path / "stages"
         summaries_dir = path / "summaries"
@@ -165,6 +223,8 @@ def _list_artifact_runs() -> list[dict[str, Any]]:
         items.append(
             {
                 "id": path.name,
+                "topic_slug": run_topic,
+                "topic_name": meta.get("topic_name"),
                 "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
                 "stages": stages,
                 "summaries": summaries,
@@ -182,30 +242,60 @@ def _render_markdown(text: str) -> str:
     )
 
 
-def _load_config_model() -> Config:
+def _config_with_topic(config: Config, topic_slug: str | None) -> Config:
+    if not topic_slug:
+        return config
+    topic_slug = topic_slug.strip()
+    if not topic_slug:
+        return config
+    data = config.model_dump(mode="json")
+    data["active_topic"] = topic_slug
+    return Config.model_validate(data)
+
+
+def _topic_slug_from_mapping(data: dict[str, Any] | None) -> str | None:
+    if not data:
+        return None
+    value = data.get("topic")
+    if isinstance(value, list):
+        value = value[0] if value else None
+    return str(value).strip() if value else None
+
+
+def _load_config_model(topic_slug: str | None = None) -> Config:
     load_dotenv(ROOT / ".env", override=False)
     storage = StorageManager(data_dir=str(DATA_DIR))
-    return storage.load_config()
+    return _config_with_topic(storage.load_config(), topic_slug)
 
 
-def _load_schedule_config():
-    return _load_config_model().schedule
+def _load_schedule_config(topic_slug: str | None = None):
+    return _load_config_model(topic_slug).schedule
 
 
-def _get_scheduler() -> PipelineScheduler:
-    global SCHEDULER
+def _get_scheduler(topic_slug: str | None = None) -> PipelineScheduler:
+    config = _load_config_model(topic_slug)
+    slug = config.get_active_topic().slug
     with SCHEDULER_LOCK:
-        if SCHEDULER is None:
-            SCHEDULER = PipelineScheduler(
-                _load_schedule_config,
-                start_blocking_cli_job,
+        if slug not in SCHEDULERS:
+            SCHEDULERS[slug] = PipelineScheduler(
+                lambda slug=slug: _load_schedule_config(slug),
+                lambda hours, slug=slug: start_blocking_cli_job(hours, slug),
                 poll_seconds=10.0,
             )
-        return SCHEDULER
+        return SCHEDULERS[slug]
 
 
-def _scheduler_status() -> dict[str, Any]:
-    return _get_scheduler().status()
+def _scheduler_status(topic_slug: str | None = None) -> dict[str, Any]:
+    config = _load_config_model(topic_slug)
+    topic = config.get_active_topic()
+    status = _get_scheduler(topic.slug).status()
+    status["topic"] = {
+        "slug": topic.slug,
+        "name": topic.name,
+        "title_en": topic.title_en,
+        "title_zh": topic.title_zh,
+    }
+    return status
 
 
 def _read_summary_by_name(name: str) -> str:
@@ -215,8 +305,8 @@ def _read_summary_by_name(name: str) -> str:
     return file_path.read_text(encoding="utf-8")
 
 
-def _wechat_status() -> dict[str, Any]:
-    config = _load_config_model()
+def _wechat_status(topic_slug: str | None = None) -> dict[str, Any]:
+    config = _load_config_model(topic_slug)
     wc = config.publishing.wechat
     appid_present = bool(os.getenv(wc.appid_env))
     secret_present = bool(os.getenv(wc.secret_env))
@@ -233,40 +323,48 @@ def _wechat_status() -> dict[str, Any]:
         "cover_image": wc.cover_image,
         "cover_exists": cover_path.exists(),
         "cover_size": cover_path.stat().st_size if cover_path.exists() else None,
-            "default_digest": wc.default_digest,
-            "publish_mode": wc.publish_mode,
-        }
+        "default_digest": wc.default_digest,
+        "publish_mode": wc.publish_mode,
+    }
 
 
-def _validate_runtime() -> dict[str, Any]:
+def _validate_runtime(topic_slug: str | None = None) -> dict[str, Any]:
     load_dotenv(ROOT / ".env", override=False)
     storage = StorageManager(data_dir=str(DATA_DIR))
-    config = storage.load_config()
+    config = _config_with_topic(storage.load_config(), topic_slug)
+    topic = config.get_active_topic()
+    scoped = config.scoped_to_active_topic()
     missing_env = []
     warnings = []
     if config.ai.api_key_env and not os.getenv(config.ai.api_key_env):
         missing_env.append(config.ai.api_key_env)
-    if config.sources.github and not os.getenv("GITHUB_TOKEN"):
+    if scoped.sources.github and not os.getenv("GITHUB_TOKEN"):
         warnings.append("GITHUB_TOKEN is not set; GitHub may return 401 or rate-limit.")
     if config.webhook and config.webhook.enabled and config.webhook.url_env and not os.getenv(config.webhook.url_env):
         missing_env.append(config.webhook.url_env)
     return {
         "ok": not missing_env,
+        "topic": {
+            "slug": topic.slug,
+            "name": topic.name,
+            "title_en": topic.title_en,
+            "title_zh": topic.title_zh,
+        },
         "ai": {
             "provider": config.ai.provider.value,
             "model": config.ai.model,
             "languages": config.ai.languages,
             "api_key_env": config.ai.api_key_env,
         },
-        "filtering": config.filtering.model_dump(mode="json"),
-        "summary": config.summary.model_dump(mode="json"),
+        "filtering": scoped.filtering.model_dump(mode="json"),
+        "summary": scoped.summary.model_dump(mode="json"),
         "artifacts": config.artifacts.model_dump(mode="json"),
         "missing_env": missing_env,
         "warnings": warnings,
     }
 
 
-def _start_cli_job(hours: int | None) -> dict[str, Any]:
+def _start_cli_job(hours: int | None, topic_slug: str | None = None) -> dict[str, Any]:
     WEB_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     job_id = f"job-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid4().hex[:8]}"
     job_dir = WEB_RUNS_DIR / job_id
@@ -276,6 +374,9 @@ def _start_cli_job(hours: int | None) -> dict[str, Any]:
     command = [sys.executable, "-m", "src.main"]
     if hours:
         command.extend(["--hours", str(hours)])
+    config = _load_config_model(topic_slug)
+    topic = config.get_active_topic()
+    command.extend(["--topic", topic.slug])
 
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
@@ -296,6 +397,7 @@ def _start_cli_job(hours: int | None) -> dict[str, Any]:
         command=command,
         created_at=_utc_now(),
         log_path=log_path,
+        topic_slug=topic.slug,
         process=process,
     )
     with JOBS_LOCK:
@@ -323,25 +425,26 @@ class AICTODailyWebHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
             query = parse_qs(parsed.query)
+            topic_slug = _topic_slug_from_mapping(query)
             if path == "/":
                 self._send_html(INDEX_HTML)
             elif path == "/api/status":
-                self._send_json(self._status_payload())
+                self._send_json(self._status_payload(topic_slug))
             elif path == "/api/config":
-                self._send_json({"path": str(CONFIG_PATH), "text": _load_config_raw()})
+                self._send_json({"path": str(CONFIG_PATH), "text": _config_text_for_editor()})
             elif path == "/api/summaries":
-                self._send_json({"items": _list_summaries()})
+                self._send_json({"items": _list_summaries(topic_slug)})
             elif path.startswith("/api/summaries/"):
                 name = path.removeprefix("/api/summaries/")
                 file_path = _safe_child(SUMMARIES_DIR, name)
                 text = file_path.read_text(encoding="utf-8")
                 self._send_json({"name": file_path.name, "text": text, "html": _render_markdown(text)})
             elif path == "/api/artifact-runs":
-                self._send_json({"items": _list_artifact_runs()})
+                self._send_json({"items": _list_artifact_runs(topic_slug)})
             elif path == "/api/publish/wechat/status":
-                self._send_json(_wechat_status())
+                self._send_json(_wechat_status(topic_slug))
             elif path == "/api/schedule/status":
-                self._send_json(_scheduler_status())
+                self._send_json(_scheduler_status(topic_slug))
             elif path.startswith("/api/artifact-runs/"):
                 self._artifact_route(path)
             elif path == "/api/jobs":
@@ -368,6 +471,7 @@ class AICTODailyWebHandler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             payload = self._read_json()
+            topic_slug = _topic_slug_from_mapping(payload)
             if parsed.path == "/api/config/validate":
                 config = _validate_config_text(str(payload.get("text", "")))
                 self._send_json({"ok": True, "config": config.model_dump(mode="json")})
@@ -380,19 +484,19 @@ class AICTODailyWebHandler(BaseHTTPRequestHandler):
                 hours_int = int(hours) if hours not in (None, "", 0) else None
                 if hours_int is not None and hours_int <= 0:
                     raise ValueError("hours must be positive")
-                self._send_json(_start_cli_job(hours_int), status=HTTPStatus.ACCEPTED)
+                self._send_json(_start_cli_job(hours_int, topic_slug), status=HTTPStatus.ACCEPTED)
             elif parsed.path == "/api/schedule/start":
-                _get_scheduler().start()
-                self._send_json(_scheduler_status())
+                _get_scheduler(topic_slug).start()
+                self._send_json(_scheduler_status(topic_slug))
             elif parsed.path == "/api/schedule/stop":
-                _get_scheduler().stop()
-                self._send_json(_scheduler_status())
+                _get_scheduler(topic_slug).stop()
+                self._send_json(_scheduler_status(topic_slug))
             elif parsed.path == "/api/schedule/run-now":
                 hours = payload.get("hours")
                 hours_int = int(hours) if hours not in (None, "", 0) else None
                 if hours_int is not None and hours_int <= 0:
                     raise ValueError("hours must be positive")
-                scheduler = _get_scheduler()
+                scheduler = _get_scheduler(topic_slug)
                 thread = threading.Thread(
                     target=lambda: scheduler.trigger_now(hours_int),
                     daemon=True,
@@ -411,25 +515,39 @@ class AICTODailyWebHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
-    def _status_payload(self) -> dict[str, Any]:
+    def _status_payload(self, topic_slug: str | None = None) -> dict[str, Any]:
         try:
-            validation = _validate_runtime()
+            validation = _validate_runtime(topic_slug)
         except Exception as exc:
             validation = {"ok": False, "error": str(exc)}
+        config = _load_config_model(topic_slug)
+        topics = [
+            {
+                "slug": topic.slug,
+                "name": topic.name,
+                "title_en": topic.title_en,
+                "title_zh": topic.title_zh,
+                "enabled": topic.enabled,
+            }
+            for topic in config.topics
+        ]
+        active_topic = config.get_active_topic().slug
         with JOBS_LOCK:
             jobs = [_job_payload(job) for job in sorted(JOBS.values(), key=lambda j: j.created_at, reverse=True)]
         return {
             "root": str(ROOT),
             "config_path": str(CONFIG_PATH),
+            "topics": topics,
+            "active_topic": active_topic,
             "validation": validation,
-            "schedule": _scheduler_status(),
+            "schedule": _scheduler_status(active_topic),
             "jobs": jobs[:10],
-            "summaries": _list_summaries()[:8],
-            "artifact_runs": _list_artifact_runs()[:8],
+            "summaries": _list_summaries(active_topic)[:8],
+            "artifact_runs": _list_artifact_runs(active_topic)[:8],
         }
 
     def _wechat_preview(self, payload: dict[str, Any]) -> None:
-        config = _load_config_model()
+        config = _load_config_model(_topic_slug_from_mapping(payload))
         markdown_text = str(payload.get("text") or "")
         summary_name = str(payload.get("summary_name") or "")
         if not markdown_text and summary_name:
@@ -453,7 +571,7 @@ class AICTODailyWebHandler(BaseHTTPRequestHandler):
         )
 
     async def _wechat_publish(self, payload: dict[str, Any]) -> dict[str, Any]:
-        config = _load_config_model()
+        config = _load_config_model(_topic_slug_from_mapping(payload))
         wc = config.publishing.wechat
         if not wc.enabled:
             raise ValueError("WeChat publishing is disabled in config.")
@@ -583,6 +701,10 @@ INDEX_HTML = r"""<!doctype html>
     header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; background:#111827; color:white; }
     header h1 { margin:0; font-size:18px; font-weight:650; }
     header .sub { color:#cbd5e1; font-size:12px; }
+    .top-controls { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; justify-content:flex-end; }
+    .topic-picker { min-width:220px; }
+    .topic-picker label { color:#cbd5e1; }
+    .topic-picker select { background:#1f2937; color:white; border-color:#334155; padding:7px 9px; }
     main { display:grid; grid-template-columns: 260px 1fr; min-height:calc(100vh - 54px); }
     nav { border-right:1px solid var(--line); background:#fff; padding:14px; }
     nav button { width:100%; display:flex; align-items:center; gap:8px; padding:10px 12px; margin:4px 0; border:0; border-radius:6px; background:transparent; color:var(--ink); text-align:left; cursor:pointer; }
@@ -631,13 +753,36 @@ INDEX_HTML = r"""<!doctype html>
     .markdown th, .markdown td { border:1px solid var(--line); padding:6px 8px; }
     .preview-actions { margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap; }
     .wechat-frame { width:100%; min-height:720px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .config-tools { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+    .config-filter { min-width:260px; flex:1; }
+    .config-table-wrap { border:1px solid var(--line); border-radius:8px; overflow:auto; max-height:720px; background:#fff; }
+    .config-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .config-table th, .config-table td { border-bottom:1px solid var(--line); padding:8px; vertical-align:top; }
+    .config-table th { position:sticky; top:0; z-index:1; background:#f8fafc; text-align:left; color:#475467; font-size:12px; }
+    .config-path { width:34%; overflow-wrap:anywhere; }
+    .config-name { font-weight:650; }
+    .config-path-hint { margin-top:2px; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:11px; }
+    .config-type { width:90px; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; }
+    .config-value-cell { width:auto; }
+    .config-value-cell input[type="text"], .config-value-cell input[type="number"], .config-value-cell textarea { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; }
+    .config-value-cell textarea { min-height:80px; max-height:260px; resize:vertical; }
+    .config-value-cell .prompt-area { min-height:180px; }
+    .config-hidden { display:none; }
+    .config-array-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .config-add { border:0; border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:650; background:#e8edf5; color:#172033; }
     @media (max-width: 860px) { main { grid-template-columns:1fr; } nav { display:flex; overflow:auto; border-right:0; border-bottom:1px solid var(--line); } nav button { min-width:150px; } .split { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
   <header>
     <div><h1>AI CTO Daily Console</h1><div class="sub">本地 Web UI · 运行流水线 · 查看日志 · 编辑配置 · 调试中间产物</div></div>
-    <div id="statusBadge" class="sub">Loading...</div>
+    <div class="top-controls">
+      <div class="topic-picker">
+        <label>Topic</label>
+        <select id="topicSelect" onchange="changeTopic()"></select>
+      </div>
+      <div id="statusBadge" class="sub">Loading...</div>
+    </div>
   </header>
   <main>
     <nav>
@@ -692,12 +837,19 @@ INDEX_HTML = r"""<!doctype html>
       <section id="config">
         <div class="panel">
           <h2>Config Editor</h2>
-          <div class="row" style="margin-bottom:10px">
+          <div class="config-tools">
             <button class="secondary" onclick="loadConfig()">Reload</button>
             <button class="secondary" onclick="validateConfig()">Validate</button>
             <button class="primary" onclick="saveConfig()">Save with Backup</button>
+            <button class="secondary" onclick="setConfigView('table')">Table View</button>
+            <button class="secondary" onclick="setConfigView('raw')">Raw JSON</button>
+            <div class="config-filter">
+              <label>Filter table paths / values</label>
+              <input id="configFilter" placeholder="topic, prompts.analysis, steam..." oninput="renderConfigTable()" />
+            </div>
           </div>
-          <textarea id="configText" spellcheck="false"></textarea>
+          <div id="configTableWrap" class="config-table-wrap"></div>
+          <textarea id="configText" class="config-hidden" spellcheck="false"></textarea>
           <p id="configMessage" class="muted"></p>
         </div>
       </section>
@@ -757,11 +909,47 @@ INDEX_HTML = r"""<!doctype html>
     let selectedJob = null;
     let currentSummary = null;
     let summaryMode = 'rendered';
+    let configView = 'table';
+    let configObject = null;
+    let selectedTopic = localStorage.getItem('aiCtoDailyTopic') || '';
     async function api(path, opts={}) {
       const res = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
+    }
+    function topicQuery() {
+      return selectedTopic ? `topic=${encodeURIComponent(selectedTopic)}` : '';
+    }
+    function withTopic(path) {
+      const q = topicQuery();
+      if (!q) return path;
+      return path + (path.includes('?') ? '&' : '?') + q;
+    }
+    function topicPayload(extra={}) {
+      return selectedTopic ? {...extra, topic:selectedTopic} : extra;
+    }
+    function renderTopicSelect(topics, activeTopic) {
+      const select = $('topicSelect');
+      const previous = selectedTopic || activeTopic;
+      select.innerHTML = (topics || []).map(t => `<option value="${esc(t.slug)}">${esc(t.name || t.slug)}${t.enabled ? '' : ' (disabled)'}</option>`).join('');
+      if (previous && [...select.options].some(o => o.value === previous)) {
+        select.value = previous;
+        selectedTopic = previous;
+      } else if (activeTopic) {
+        select.value = activeTopic;
+        selectedTopic = activeTopic;
+      }
+      if (selectedTopic) localStorage.setItem('aiCtoDailyTopic', selectedTopic);
+    }
+    async function changeTopic() {
+      selectedTopic = $('topicSelect').value;
+      localStorage.setItem('aiCtoDailyTopic', selectedTopic);
+      currentSummary = null;
+      $('summaryPreview').textContent = 'Select a summary.';
+      $('artifactPreview').textContent = 'Select a run artifact.';
+      $('wechatMode').dataset.loaded = '';
+      await refreshAll();
     }
     function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
     document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
@@ -769,7 +957,8 @@ INDEX_HTML = r"""<!doctype html>
       btn.classList.add('active'); $(btn.dataset.tab).classList.add('active');
     });
     async function refreshAll() {
-      const s = await api('/api/status');
+      const s = await api(withTopic('/api/status'));
+      renderTopicSelect(s.topics || [], s.active_topic || ((s.validation || {}).topic || {}).slug);
       const v = s.validation;
       const scheduler = s.schedule || {};
       const schedulerLabel = scheduler.service_running ? 'Scheduler running' : 'Scheduler stopped';
@@ -781,6 +970,7 @@ INDEX_HTML = r"""<!doctype html>
       `;
       $('runtime').innerHTML = v.error ? `<p class="bad">${esc(v.error)}</p>` : `
         <div><b>${esc(v.ai.provider)}</b> · ${esc(v.ai.model)}</div>
+        <div><b>Topic</b> - ${esc((v.topic || {}).name || '')} <span class="muted">${esc((v.topic || {}).slug || '')}</span></div>
         <div class="muted">Languages: ${esc((v.ai.languages||[]).join(', '))}</div>
         <div class="muted">Threshold: ${esc(v.filtering.ai_score_threshold)}</div>
         <div class="muted">Artifacts: ${esc(v.artifacts.enabled)}</div>
@@ -804,12 +994,13 @@ INDEX_HTML = r"""<!doctype html>
       $('jobsList').innerHTML = jobs.length ? jobs.map(j => `<div class="item">
         <div class="item-title">${esc(j.id)}</div>
         <div class="${j.status === 'success' ? 'ok' : j.status === 'error' ? 'bad' : 'muted'}">${esc(j.status)} ${j.returncode ?? ''}</div>
+        <div class="muted">Topic: ${esc(j.topic || 'unknown')}</div>
         <button class="secondary" onclick="selectJob('${esc(j.id)}')">View Log</button>
       </div>`).join('') : '<p class="muted">No web jobs in this server session.</p>';
     }
     async function startRun() {
       const hours = Number($('runHours').value || 24);
-      const job = await api('/api/run', {method:'POST', body:JSON.stringify({hours})});
+      const job = await api('/api/run', {method:'POST', body:JSON.stringify(topicPayload({hours}))});
       selectedJob = job.id;
       await refreshAll();
       document.querySelector('[data-tab="logs"]').click();
@@ -852,16 +1043,16 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
     async function startScheduler() {
-      await api('/api/schedule/start', {method:'POST', body:JSON.stringify({})});
+      await api('/api/schedule/start', {method:'POST', body:JSON.stringify(topicPayload())});
       await refreshAll();
     }
     async function stopScheduler() {
-      await api('/api/schedule/stop', {method:'POST', body:JSON.stringify({})});
+      await api('/api/schedule/stop', {method:'POST', body:JSON.stringify(topicPayload())});
       await refreshAll();
     }
     async function runScheduleNow() {
       const hours = Number($('scheduleRunHours').value || 30);
-      await api('/api/schedule/run-now', {method:'POST', body:JSON.stringify({hours})});
+      await api('/api/schedule/run-now', {method:'POST', body:JSON.stringify(topicPayload({hours}))});
       await refreshAll();
     }
     async function pollLog() {
@@ -873,18 +1064,334 @@ INDEX_HTML = r"""<!doctype html>
     async function loadConfig() {
       const data = await api('/api/config');
       $('configText').value = data.text;
+      try { configObject = JSON.parse(data.text); }
+      catch(e) { configObject = null; }
+      setConfigView(configView || 'table');
       $('configMessage').textContent = data.path;
+    }
+    function setConfigView(mode) {
+      configView = mode;
+      if (mode === 'raw') {
+        if (document.querySelector('[data-config-path]')) collectConfigFromTable();
+        $('configText').classList.remove('config-hidden');
+        $('configTableWrap').classList.add('config-hidden');
+        $('configFilter').disabled = true;
+        return;
+      }
+      try {
+        configObject = JSON.parse($('configText').value || '{}');
+        renderConfigTable();
+        $('configText').classList.add('config-hidden');
+        $('configTableWrap').classList.remove('config-hidden');
+        $('configFilter').disabled = false;
+      } catch(e) {
+        $('configMessage').innerHTML = `<span class="bad">Cannot render table: ${esc(e.message)}</span>`;
+        setConfigView('raw');
+      }
+    }
+    function pathLabel(path) {
+      return path.map((part, index) => typeof part === 'number' ? `[${part}]` : (index === 0 ? part : `.${part}`)).join('');
+    }
+    const CONFIG_LABELS = {
+      version: 'Config version',
+      active_topic: 'Active topic',
+      topics: 'Topics',
+      ai: 'AI model',
+      provider: 'Provider',
+      model: 'Model',
+      api_key_env: 'API key env',
+      base_url: 'Base URL',
+      temperature: 'Temperature',
+      max_tokens: 'Max tokens',
+      throttle_sec: 'Throttle seconds',
+      analysis_concurrency: 'Analysis concurrency',
+      enrichment_concurrency: 'Enrichment concurrency',
+      languages: 'Languages',
+      email: 'Email',
+      enabled: 'Enabled',
+      smtp_server: 'SMTP server',
+      smtp_port: 'SMTP port',
+      smtp_username: 'SMTP username',
+      imap_enabled: 'IMAP enabled',
+      imap_server: 'IMAP server',
+      imap_port: 'IMAP port',
+      email_address: 'Email address',
+      password_env: 'Password env',
+      sender_name: 'Sender name',
+      sources: 'Sources',
+      github: 'GitHub sources',
+      hackernews: 'Hacker News',
+      rss: 'RSS feeds',
+      reddit: 'Reddit',
+      subreddits: 'Subreddits',
+      users: 'Users',
+      telegram: 'Telegram',
+      channels: 'Channels',
+      twitter: 'Twitter/X',
+      steam: 'Steam',
+      fetch_new_releases: 'Fetch new releases',
+      candidate_count: 'Steam candidate count',
+      new_release_window_days: 'New release window days',
+      country: 'Country',
+      language: 'Language',
+      min_total_reviews: 'Minimum total reviews',
+      min_positive_ratio: 'Minimum positive ratio',
+      include_free: 'Include free games',
+      include_early_access: 'Include Early Access',
+      openbb: 'OpenBB',
+      ossinsight: 'OSS Insight',
+      name: 'Name',
+      slug: 'Slug',
+      title_en: 'English title',
+      title_zh: 'Chinese title',
+      description: 'Description',
+      audience: 'Audience',
+      relevance_prompt: 'Relevance prompt',
+      cto_prompt_focus: 'Takeaway focus',
+      prompts: 'Prompts',
+      analysis_system: 'Scoring system prompt',
+      analysis_user: 'Scoring user prompt',
+      concept_system: 'Concept extraction system prompt',
+      concept_user: 'Concept extraction user prompt',
+      enrichment_system: 'Enrichment system prompt',
+      enrichment_user: 'Enrichment user prompt',
+      takeaway_system: 'Takeaway system prompt',
+      takeaway_user: 'Takeaway user prompt',
+      topic_dedup_system: 'Topic dedup system prompt',
+      topic_dedup_user: 'Topic dedup user prompt',
+      translation_system: 'Translation fallback system prompt',
+      translation_user: 'Translation fallback user prompt',
+      filtering: 'Filtering',
+      ai_score_threshold: 'AI score threshold',
+      time_window_hours: 'Time window hours',
+      summary: 'Summary format',
+      disclosure: 'Disclosure',
+      include_summary: 'Opening summary',
+      include_cto_takeaway: 'Takeaway section',
+      max_detailed_items: 'Detailed item limit',
+      show_scores: 'Show scores',
+      compact_remaining: 'Compact remaining items',
+      compact_sentence_limit: 'Compact sentence limit',
+      include_bilingual: 'Bilingual output',
+      bilingual_primary_language: 'Bilingual primary language',
+      bilingual_secondary_language: 'Second language',
+      cto_takeaway_ai_enabled: 'AI takeaway enabled',
+      cto_takeaway_ai_items: 'AI takeaway item count',
+      schedule: 'Schedule',
+      timezone: 'Timezone',
+      daily_times: 'Daily times',
+      interval_minutes: 'Interval minutes',
+      hours: 'Pipeline hours',
+      run_on_start: 'Run on start',
+      prevent_overlap: 'Prevent overlap',
+      publishing: 'Publishing',
+      wechat: 'WeChat',
+      auto_create_draft_on_run: 'Auto-create draft after run',
+      appid_env: 'AppID env',
+      secret_env: 'Secret env',
+      author: 'Author',
+      cover_image: 'Cover image',
+      default_digest: 'Default digest',
+      publish_mode: 'Publish mode',
+      review_reminder_enabled: 'Review reminder',
+      review_reminder_recipients: 'Review reminder recipients',
+      review_reminder_subject: 'Review reminder subject',
+      review_url: 'Review URL',
+      url: 'URL',
+      category: 'Category',
+      subreddit: 'Subreddit',
+      fetch_limit: 'Fetch limit',
+      min_score: 'Minimum score',
+      fetch_comments: 'Fetch comments',
+      sort: 'Sort',
+      time_filter: 'Time filter'
+    };
+    function collectionItemLabel(parent, item, index) {
+      if (!item || typeof item !== 'object') return `Item ${index + 1}`;
+      if (parent === 'topics') return item.name || item.slug || `Topic ${index + 1}`;
+      if (parent === 'rss') return item.name || item.url || `RSS feed ${index + 1}`;
+      if (parent === 'github') return item.repo ? `${item.owner || ''}/${item.repo}` : (item.username || `GitHub source ${index + 1}`);
+      if (parent === 'subreddits') return item.subreddit ? `r/${item.subreddit}` : `Subreddit ${index + 1}`;
+      if (parent === 'channels') return item.channel || `Channel ${index + 1}`;
+      if (parent === 'review_reminder_recipients' || parent === 'daily_times' || parent === 'languages' || parent === 'users') return String(item || `Item ${index + 1}`);
+      return item.name || item.slug || item.title || `Item ${index + 1}`;
+    }
+    function readablePath(path) {
+      const parts = [];
+      let cursor = configObject;
+      for (let i = 0; i < path.length; i++) {
+        const part = path[i];
+        const parent = path[i - 1];
+        if (typeof part === 'number') {
+          parts.push(collectionItemLabel(parent, cursor ? cursor[part] : null, part));
+          cursor = cursor ? cursor[part] : undefined;
+          continue;
+        }
+        parts.push(CONFIG_LABELS[part] || part.replace(/_/g, ' '));
+        cursor = cursor ? cursor[part] : undefined;
+      }
+      return parts.join(' > ');
+    }
+    function flattenConfig(value, path=[], rows=[]) {
+      if (value === null || typeof value !== 'object') {
+        rows.push({path, value, type:value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value});
+        return rows;
+      }
+      if (Array.isArray(value)) {
+        rows.push({path, value, type:'array', arrayContainer:true});
+      }
+      const keys = Array.isArray(value) ? value.map((_, i) => i) : Object.keys(value);
+      if (keys.length === 0) {
+        rows.push({path, value, type:Array.isArray(value) ? 'array' : 'object', empty:true});
+        return rows;
+      }
+      for (const key of keys) flattenConfig(value[key], path.concat([key]), rows);
+      return rows;
+    }
+    function renderConfigTable() {
+      if (!configObject) return;
+      if (document.querySelector('[data-config-path]')) collectConfigFromTable();
+      const filter = ($('configFilter').value || '').toLowerCase();
+      const rows = flattenConfig(configObject).filter(row => {
+        const label = pathLabel(row.path).toLowerCase();
+        const readable = readablePath(row.path).toLowerCase();
+        const value = row.value === null ? 'null' : String(row.value).toLowerCase();
+        return !filter || label.includes(filter) || readable.includes(filter) || value.includes(filter);
+      });
+      $('configTableWrap').innerHTML = `
+        <table class="config-table">
+          <thead><tr><th class="config-path">Name</th><th class="config-type">Type</th><th>Value</th></tr></thead>
+          <tbody>${rows.map(configRowHtml).join('')}</tbody>
+        </table>
+      `;
+    }
+    function configRowHtml(row) {
+      const encodedPath = esc(JSON.stringify(row.path));
+      const rawPath = pathLabel(row.path);
+      const label = esc(readablePath(row.path));
+      const hint = esc(rawPath);
+      const nameCell = `<div class="config-name" title="${hint}">${label}</div><div class="config-path-hint">${hint}</div>`;
+      if (row.arrayContainer) {
+        const count = Array.isArray(row.value) ? row.value.length : 0;
+        return `<tr><td class="config-path">${nameCell}</td><td class="config-type">array</td><td class="config-value-cell"><div class="config-array-actions"><button class="config-add" onclick="addConfigArrayItem('${encodedPath}')">Add item</button><span class="muted">${count} item${count === 1 ? '' : 's'}</span></div></td></tr>`;
+      }
+      if (row.empty) {
+        return `<tr><td class="config-path">${nameCell}</td><td class="config-type">${row.type}</td><td class="config-value-cell muted">${row.type === 'array' ? 'Use Add item above.' : 'Edit empty objects in Raw JSON.'}</td></tr>`;
+      }
+      const value = row.value;
+      const type = row.type;
+      let control = '';
+      if (type === 'boolean') {
+        control = `<input data-config-path="${encodedPath}" data-config-type="boolean" type="checkbox" ${value ? 'checked' : ''} />`;
+      } else if (type === 'number') {
+        control = `<input data-config-path="${encodedPath}" data-config-type="number" type="number" step="any" value="${esc(value)}" />`;
+      } else if (type === 'null') {
+        control = `<input data-config-path="${encodedPath}" data-config-type="null" type="text" value="" placeholder="null; use Raw JSON to change type" disabled />`;
+      } else {
+        const text = String(value ?? '');
+        const longText = text.length > 100 || text.includes('\n') || rawPath.includes('.prompts.');
+        control = longText
+          ? `<textarea data-config-path="${encodedPath}" data-config-type="string" class="${rawPath.includes('.prompts.') ? 'prompt-area' : ''}">${esc(text)}</textarea>`
+          : `<input data-config-path="${encodedPath}" data-config-type="string" type="text" value="${esc(text)}" />`;
+      }
+      return `<tr><td class="config-path">${nameCell}</td><td class="config-type">${type}</td><td class="config-value-cell">${control}</td></tr>`;
+    }
+    function setAtPath(obj, path, value) {
+      let target = obj;
+      for (let i = 0; i < path.length - 1; i++) target = target[path[i]];
+      target[path[path.length - 1]] = value;
+    }
+    function getAtPath(obj, path) {
+      let target = obj;
+      for (const part of path) target = target ? target[part] : undefined;
+      return target;
+    }
+    function emptyLike(value, path=[]) {
+      if (Array.isArray(value)) return [];
+      if (value && typeof value === 'object') {
+        const out = {};
+        for (const [key, child] of Object.entries(value)) out[key] = emptyLike(child, path.concat([key]));
+        if ('enabled' in out) out.enabled = true;
+        return out;
+      }
+      if (typeof value === 'boolean') return false;
+      if (typeof value === 'number') return 0;
+      return '';
+    }
+    function defaultArrayItem(path, arr) {
+      const key = path[path.length - 1];
+      if (key === 'daily_times') return '09:00';
+      if (key === 'languages') return 'en';
+      if (key === 'review_reminder_recipients') return 'you@example.com';
+      if (key === 'users') return 'example';
+      if (key === 'keywords') return '';
+      if (key === 'symbols') return '';
+      if (key === 'topics') return {
+        slug: 'new-topic',
+        name: 'New Topic',
+        enabled: true,
+        title_en: 'New Daily',
+        title_zh: '',
+        description: '',
+        audience: '',
+        relevance_prompt: '',
+        cto_prompt_focus: '',
+        prompts: {},
+        sources: {github: [], hackernews: {enabled: false}, rss: [], reddit: {enabled: false, subreddits: [], users: [], fetch_comments: 0}, telegram: {enabled: false, channels: []}},
+        filtering: {ai_score_threshold: 7, time_window_hours: 24},
+        summary: {}
+      };
+      if (key === 'rss') return {name: 'New RSS feed', url: 'https://example.com/feed.xml', enabled: true, category: ''};
+      if (key === 'github') return {type: 'repo_releases', owner: '', repo: '', enabled: true};
+      if (key === 'subreddits') return {subreddit: 'example', enabled: true, sort: 'hot', time_filter: 'day', fetch_limit: 10, min_score: 0};
+      if (key === 'channels') return {channel: 'example', enabled: true, fetch_limit: 20};
+      if (key === 'watchlists') return {name: 'New Watchlist', symbols: [], enabled: true, provider: 'yfinance', fetch_limit: 20, category: ''};
+      if (arr.length) return emptyLike(arr[arr.length - 1], path.concat([arr.length]));
+      return '';
+    }
+    function addConfigArrayItem(encodedPath) {
+      try {
+        if (document.querySelector('[data-config-path]')) collectConfigFromTable();
+        const path = JSON.parse(encodedPath);
+        const arr = getAtPath(configObject, path);
+        if (!Array.isArray(arr)) throw new Error('Target is not an array.');
+        arr.push(defaultArrayItem(path, arr));
+        $('configText').value = JSON.stringify(configObject, null, 2) + '\n';
+        renderConfigTable();
+        $('configMessage').innerHTML = '<span class="ok">Item added. Review it, then save.</span>';
+      } catch(e) {
+        $('configMessage').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+      }
+    }
+    function collectConfigFromTable() {
+      const obj = JSON.parse(JSON.stringify(configObject || {}));
+      document.querySelectorAll('[data-config-path]').forEach(input => {
+        const path = JSON.parse(input.dataset.configPath);
+        const type = input.dataset.configType;
+        let value = input.value;
+        if (type === 'boolean') value = input.checked;
+        else if (type === 'number') value = value === '' ? null : Number(value);
+        else if (type === 'null') value = null;
+        setAtPath(obj, path, value);
+      });
+      configObject = obj;
+      $('configText').value = JSON.stringify(obj, null, 2) + '\n';
+      return $('configText').value;
+    }
+    function currentConfigText() {
+      return configView === 'table' ? collectConfigFromTable() : $('configText').value;
     }
     async function validateConfig() {
       try {
-        await api('/api/config/validate', {method:'POST', body:JSON.stringify({text:$('configText').value})});
+        await api('/api/config/validate', {method:'POST', body:JSON.stringify({text:currentConfigText()})});
         $('configMessage').innerHTML = '<span class="ok">Config is valid.</span>';
       } catch(e) { $('configMessage').innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
     }
     async function saveConfig() {
       try {
-        const data = await api('/api/config', {method:'POST', body:JSON.stringify({text:$('configText').value})});
+        const data = await api('/api/config', {method:'POST', body:JSON.stringify({text:currentConfigText()})});
         $('configMessage').innerHTML = `<span class="ok">Saved.</span> Backup: ${esc(data.backup)}`;
+        if (configView === 'table') renderConfigTable();
         await refreshAll();
       } catch(e) { $('configMessage').innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
     }
@@ -902,7 +1409,7 @@ INDEX_HTML = r"""<!doctype html>
     }
     async function refreshWeChatStatus() {
       try {
-        const s = await api('/api/publish/wechat/status');
+        const s = await api(withTopic('/api/publish/wechat/status'));
         $('wechatStatus').innerHTML = `
           <span class="${s.enabled && s.appid_present && s.secret_present && s.cover_exists ? 'ok' : 'bad'}">
             ${s.enabled ? 'Enabled' : 'Disabled'}
@@ -924,6 +1431,7 @@ INDEX_HTML = r"""<!doctype html>
     async function previewWeChat() {
       try {
         const payload = {
+          topic: selectedTopic,
           summary_name: $('wechatSummary').value,
           title: $('wechatTitle').value,
           digest: $('wechatDigest').value,
@@ -947,6 +1455,7 @@ INDEX_HTML = r"""<!doctype html>
       try {
         const payload = {
           mode,
+          topic: selectedTopic,
           summary_name: $('wechatSummary').value,
           title: $('wechatTitle').value,
           digest: $('wechatDigest').value,
@@ -1039,8 +1548,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:
-        if SCHEDULER:
-            SCHEDULER.stop()
+        for scheduler in list(SCHEDULERS.values()):
+            scheduler.stop()
         server.server_close()
 
 

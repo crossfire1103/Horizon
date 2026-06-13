@@ -78,6 +78,7 @@ def test_load_config_accepts_utf8_bom(tmp_path):
 
     assert config.version == "1.0"
     assert config.ai.provider == "anthropic"
+    assert config.get_active_topic().slug == "ai-cto"
 
 
 class TestExpandEnvVars:
@@ -152,3 +153,78 @@ def test_load_config_expands_env_vars_in_ai_base_url(tmp_path, monkeypatch):
     storage = StorageManager(data_dir=str(tmp_path))
     config = storage.load_config()
     assert config.ai.base_url == "https://private-proxy.example/v1"
+
+
+def test_active_topic_can_override_filtering_and_summary(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({
+        "version": "1.0",
+        "active_topic": "security",
+        "topics": [
+            {
+                "slug": "security",
+                "name": "Security Radar",
+                "title_en": "Security Daily",
+                "relevance_prompt": "Prioritize practical software security research.",
+                "filtering": {"ai_score_threshold": 8.5, "time_window_hours": 48},
+                "summary": {"include_summary": True, "show_scores": False},
+            }
+        ],
+        "ai": {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "api_key_env": "OPENAI_API_KEY",
+        },
+        "sources": {"hackernews": {"enabled": True}},
+        "filtering": {"ai_score_threshold": 6.0, "time_window_hours": 24},
+    }), encoding="utf-8")
+
+    storage = StorageManager(data_dir=str(tmp_path))
+    config = storage.load_config()
+    scoped = config.scoped_to_active_topic()
+
+    assert config.get_active_topic().name == "Security Radar"
+    assert scoped.filtering.ai_score_threshold == 8.5
+    assert scoped.filtering.time_window_hours == 48
+    assert scoped.summary.include_summary is True
+    assert scoped.summary.show_scores is False
+
+
+def test_example_config_topics_are_self_contained():
+    config_data = json.loads(Path("data/config.example.json").read_text(encoding="utf-8-sig"))
+    for topic in config_data["topics"]:
+        assert topic.get("sources"), topic["slug"]
+        assert topic.get("filtering"), topic["slug"]
+        assert topic.get("summary") is not None, topic["slug"]
+        assert topic.get("prompts") is not None, topic["slug"]
+
+
+def test_topic_prompt_overrides_are_loaded(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({
+        "version": "1.0",
+        "active_topic": "gaming",
+        "topics": [
+            {
+                "slug": "gaming",
+                "name": "Gaming Radar",
+                "prompts": {
+                    "analysis_system": "Custom gaming scoring prompt"
+                },
+                "sources": {"hackernews": {"enabled": False}},
+                "filtering": {"ai_score_threshold": 7.0, "time_window_hours": 24},
+                "summary": {},
+            }
+        ],
+        "ai": {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "api_key_env": "OPENAI_API_KEY",
+        },
+        "sources": {"hackernews": {"enabled": True}},
+        "filtering": {"ai_score_threshold": 6.0, "time_window_hours": 24},
+    }), encoding="utf-8")
+
+    config = StorageManager(data_dir=str(tmp_path)).load_config()
+
+    assert config.get_active_topic().prompts.analysis_system == "Custom gaming scoring prompt"

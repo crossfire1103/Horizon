@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from src.ai.summarizer import DailySummarizer
-from src.models import ContentItem, SourceType, SummaryConfig
+from src.models import ContentItem, SourceType, SummaryConfig, TopicConfig
 
 
 def _run_async(coro):
@@ -42,6 +42,28 @@ def test_generate_webhook_overview_lists_items_without_full_details():
     assert "1. [Important Item 1](https://example.com/items/1)" in result
     assert "2. [Important Item 2](https://example.com/items/2)" in result
     assert "Summary for item 1." not in result
+
+
+def test_generate_summary_uses_topic_title():
+    summarizer = DailySummarizer(
+        topic=TopicConfig(
+            slug="security",
+            name="Security Radar",
+            title_en="Security Daily",
+            title_zh="安全日报",
+        )
+    )
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [_make_item(1)],
+            date="2026-04-25",
+            total_fetched=3,
+            language="en",
+        )
+    )
+
+    assert result.startswith("# Security Daily - 2026-04-25")
 
 
 def test_generate_webhook_item_renders_single_item_detail():
@@ -174,6 +196,69 @@ def test_generate_summary_can_append_bilingual_render_without_ai_calls():
     assert "English summary." in result
     assert "中文摘要。" in result
 
+
+
+def test_generate_summary_can_force_bilingual_primary_language():
+    summarizer = DailySummarizer(
+        SummaryConfig(
+            include_bilingual=True,
+            bilingual_primary_language="zh",
+            bilingual_secondary_language="en",
+            show_scores=False,
+        ),
+        topic=TopicConfig(
+            slug="gaming",
+            name="Gaming Radar",
+            title_en="Gaming Daily",
+            title_zh="\u6e38\u620f\u65e5\u62a5",
+        ),
+    )
+    item = _make_item(1)
+    item.metadata["title_en"] = "English Title"
+    item.metadata["title_zh"] = "\u4e2d\u6587\u6807\u9898"
+    item.metadata["detailed_summary_en"] = "English summary."
+    item.metadata["detailed_summary_zh"] = "\u4e2d\u6587\u6458\u8981\u3002"
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [item],
+            date="2026-04-25",
+            total_fetched=10,
+            language="en",
+        )
+    )
+
+    assert result.find("# \u6e38\u620f\u65e5\u62a5 - 2026-04-25") < result.find("# Gaming Daily - 2026-04-25")
+    assert result.find("[\u4e2d\u6587\u6807\u9898](https://example.com/items/1)") < result.find("[English Title](https://example.com/items/1)")
+
+
+def test_gaming_summary_uses_highlights_label():
+    summarizer = DailySummarizer(
+        SummaryConfig(
+            include_cto_takeaway=True,
+            show_scores=False,
+        ),
+        topic=TopicConfig(
+            slug="gaming",
+            name="Gaming Radar",
+            title_en="Gaming Daily",
+            title_zh="\u6e38\u620f\u65e5\u62a5",
+        ),
+    )
+    item = _make_item(1)
+    item.metadata["cto_takeaway_zh"] = "\u8fd9\u6761\u65b0\u95fb\u7684\u4eae\u70b9\u662f\u73a9\u5bb6\u53cd\u9988\u548c\u9996\u53d1\u70ed\u5ea6\u3002"
+
+    result = _run_async(
+        summarizer.generate_summary(
+            [item],
+            date="2026-04-25",
+            total_fetched=10,
+            language="zh",
+        )
+    )
+
+    assert "## \u4eae\u70b9\u901f\u9012" in result
+    assert "CTO" not in result.split("## \u4eae\u70b9\u901f\u9012", 1)[0]
 
 def test_generate_summary_can_skip_opening_summary_and_keep_cto_takeaway():
     summarizer = DailySummarizer(

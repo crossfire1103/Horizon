@@ -108,8 +108,14 @@ class StorageManager:
 
         return self.config_path
 
-    def save_daily_summary(self, date: str, markdown: str, language: str = "en") -> Path:
-        filename = f"ai-cto-daily-{date}-{language}.md"
+    def save_daily_summary(
+        self,
+        date: str,
+        markdown: str,
+        language: str = "en",
+        topic_slug: str = "ai-cto",
+    ) -> Path:
+        filename = f"{topic_slug}-daily-{date}-{language}.md"
         filepath = self.summaries_dir / filename
 
         with open(filepath, "w", encoding="utf-8") as f:

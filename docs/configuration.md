@@ -173,6 +173,106 @@ By default, AI scoring and enrichment run one item at a time. If your API endpoi
 
 For OpenAI-compatible gateways, AI CTO Daily sends `temperature` by default. If a newer reasoning-style model rejects that parameter with an error such as `temperature is deprecated for this model`, AI CTO Daily retries once without it and remembers that capability for later requests.
 
+## Topics
+
+AI CTO Daily treats topics as peer briefing products. The default active topic
+is `ai-cto`, and each topic should carry its own sources, filtering, summary
+format, titles, and scoring guardrails. Global AI/email/webhook/scheduler
+settings are shared across topics.
+
+```json
+{
+  "active_topic": "ai-cto",
+  "topics": [
+    {
+      "slug": "ai-cto",
+      "name": "AI CTO",
+      "enabled": true,
+      "title_en": "AI CTO Daily",
+      "title_zh": "AI CTO 日报",
+      "description": "AI technology briefing for CTOs and engineering leaders.",
+      "audience": "CTOs, VP Engineering, platform leaders, and senior AI practitioners.",
+      "relevance_prompt": "Only score items highly when they are directly about AI/ML, LLMs, AI agents, model releases, AI infrastructure, AI inference/serving, AI developer tools, AI safety/security, AI product/platform changes, or technical research that directly advances or evaluates AI systems.",
+      "cto_prompt_focus": "Connect news to enterprise technology strategy, architecture, engineering productivity, platform reliability, AI infrastructure cost, security/compliance, vendor strategy, team capability, and roadmap decisions."
+    }
+  ]
+}
+```
+
+Top-level `sources`, `filtering`, and `summary` are kept only as a legacy
+fallback for older single-topic configs. New topics should be self-contained,
+so `ai-cto`, `gaming`, and future topics can evolve independently.
+
+Each topic can also override prompts through its `prompts` block. Leave a
+field as `null` to use the built-in default prompt for that step.
+
+```json
+{
+  "slug": "gaming",
+  "prompts": {
+    "analysis_system": null,
+    "analysis_user": null,
+    "concept_system": null,
+    "concept_user": null,
+    "enrichment_system": null,
+    "enrichment_user": null,
+    "takeaway_system": null,
+    "takeaway_user": null,
+    "topic_dedup_system": null,
+    "topic_dedup_user": null,
+    "translation_system": null,
+    "translation_user": null
+  }
+}
+```
+
+User prompts are Python `str.format` templates. Keep the placeholders used by
+the built-in prompts when you customize them. For example, `analysis_user`
+should preserve placeholders such as `{title}`, `{source}`, `{url}`,
+`{content_section}`, and `{discussion_section}`. `enrichment_user` should keep
+the bilingual JSON schema unless you also update the renderer.
+
+```json
+{
+  "slug": "security",
+  "name": "Security Radar",
+  "title_en": "Security Daily",
+  "relevance_prompt": "Prioritize practical software security research, exploited vulnerabilities, supply-chain incidents, and defensive engineering lessons.",
+  "sources": {
+    "github": [],
+    "hackernews": {"enabled": false},
+    "rss": [],
+    "reddit": {"enabled": false, "subreddits": [], "users": [], "fetch_comments": 0},
+    "telegram": {"enabled": false, "channels": []}
+  },
+  "filtering": {
+    "ai_score_threshold": 8,
+    "time_window_hours": 24
+  },
+  "summary": {
+    "include_cto_takeaway": true,
+    "show_scores": false
+  }
+}
+```
+
+Run a specific configured topic without editing `active_topic`:
+
+```bash
+uv run ai-cto-daily --topic security --hours 24
+```
+
+The built-in example also includes a `gaming` topic. It is grouped by RSS
+source categories such as `steam`, `indie`, `aaa-console`,
+`online-live-service`, `china-games`, and `industry`. The first Steam
+integration uses Steam's public RSS feeds, so it captures Steam news and News
+Hub updates. Deeper structured Steam data such as charts, wishlists, reviews,
+or release calendars should be added as a dedicated scraper later if needed.
+
+```bash
+uv run ai-cto-daily --topic gaming --hours 30
+```
+
 ## Information Sources
 
 All sources are configured under the top-level `sources` key in `config.json`.
@@ -502,6 +602,7 @@ For personal WeChat Official Accounts that cannot use the publish API, keep `pub
   "publishing": {
     "wechat": {
       "enabled": true,
+      "auto_create_draft_on_run": true,
       "publish_mode": "draft",
       "review_reminder_enabled": true,
       "review_reminder_recipients": ["owner@example.com"],
@@ -512,7 +613,8 @@ For personal WeChat Official Accounts that cannot use the publish API, keep `pub
 }
 ```
 
-- `review_reminder_enabled`: Sends a review email after the daily summary files are generated.
+- `auto_create_draft_on_run`: Creates a WeChat draft automatically after each successful pipeline run. Keep `publish_mode` as `draft` when you want to review and publish manually in the WeChat backend.
+- `review_reminder_enabled`: Sends a review email after the draft and daily summary files are generated.
 - `review_reminder_recipients`: Explicit reminder recipients. If empty, AI CTO Daily sends the reminder to `email.email_address`.
 - `review_url`: Web console URL shown in the reminder email. For a Synology deployment, use the NAS address such as `http://192.168.50.2:8765`.
 

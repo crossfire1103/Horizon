@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import src.ai.analyzer as analyzer_module
 from src.ai.analyzer import ContentAnalyzer
-from src.models import ContentItem, SourceType
+from src.models import ContentItem, PromptConfig, SourceType, TopicConfig
 
 
 def _make_item(item_id: str) -> ContentItem:
@@ -94,3 +94,59 @@ def test_analyze_batch_concurrent_preserves_order(monkeypatch):
     result = asyncio.run(analyzer.analyze_batch(items))
 
     assert [item.id for item in result] == [item.id for item in items]
+
+
+def test_analyze_item_includes_feed_and_category_in_source_prompt():
+    class FakeClient:
+        config = SimpleNamespace()
+
+        def __init__(self):
+            self.user_prompt = ""
+
+        async def complete(self, system, user):
+            self.user_prompt = user
+            return '{"score": 8, "reason": "Relevant", "summary": "Summary", "tags": ["games"]}'
+
+    client = FakeClient()
+    analyzer = ContentAnalyzer(client)
+    item = _make_item("rss:test:source")
+    item.metadata["feed_name"] = "Steam News Hub"
+    item.metadata["category"] = "steam"
+
+    asyncio.run(analyzer._analyze_item(item))
+
+    assert "Source: rss | feed=Steam News Hub | category=steam" in client.user_prompt
+    assert item.ai_score == 8.0
+
+
+def test_analyze_item_uses_topic_prompt_overrides():
+    class FakeClient:
+        config = SimpleNamespace()
+
+        def __init__(self):
+            self.system_prompt = ""
+            self.user_prompt = ""
+
+        async def complete(self, system, user):
+            self.system_prompt = system
+            self.user_prompt = user
+            return '{"score": 7, "reason": "Custom", "summary": "Summary", "tags": ["custom"]}'
+
+    topic = TopicConfig(
+        slug="gaming",
+        name="Gaming",
+        prompts=PromptConfig(
+            analysis_system="Custom system prompt",
+            analysis_user="Custom user prompt for {title} from {source} at {published_at}",
+        ),
+    )
+    client = FakeClient()
+    analyzer = ContentAnalyzer(client, topic=topic)
+
+    asyncio.run(analyzer._analyze_item(_make_item("rss:test:prompt")))
+
+    assert client.system_prompt == "Custom system prompt"
+    assert (
+        client.user_prompt
+        == "Custom user prompt for Item rss:test:prompt from rss at 2026-04-26T00:00:00+00:00"
+    )

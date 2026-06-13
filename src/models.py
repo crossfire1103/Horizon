@@ -11,6 +11,7 @@ class SourceType(str, Enum):
 
     GITHUB = "github"
     HACKERNEWS = "hackernews"
+    STEAM = "steam"
     RSS = "rss"
     REDDIT = "reddit"
     TELEGRAM = "telegram"
@@ -212,6 +213,27 @@ class OSSInsightConfig(BaseModel):
     max_items: int = 30
 
 
+class SteamConfig(BaseModel):
+    """Steam Store source configuration.
+
+    Uses Steam Store search for recently released games, then enriches each app
+    with Store app details and Steam review summary data.
+    """
+
+    enabled: bool = False
+    fetch_new_releases: bool = True
+    max_items: int = 30
+    candidate_count: int = 200
+    country: str = "US"
+    language: str = "english"
+    category: str = "steam-new-releases"
+    new_release_window_days: int = 7
+    min_total_reviews: int = 0
+    min_positive_ratio: Optional[float] = None
+    include_free: bool = True
+    include_early_access: bool = True
+
+
 class SourcesConfig(BaseModel):
     """All sources configuration."""
 
@@ -221,6 +243,7 @@ class SourcesConfig(BaseModel):
     reddit: RedditConfig = Field(default_factory=RedditConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     twitter: Optional[TwitterConfig] = None
+    steam: SteamConfig = Field(default_factory=SteamConfig)
     openbb: Optional[OpenBBConfig] = None
     ossinsight: OSSInsightConfig = Field(default_factory=OSSInsightConfig)
 
@@ -327,9 +350,66 @@ class SummaryConfig(BaseModel):
     compact_remaining: bool = False
     compact_sentence_limit: int = 2
     include_bilingual: bool = False
+    bilingual_primary_language: Optional[str] = None
     bilingual_secondary_language: str = "zh"
     cto_takeaway_ai_enabled: bool = False
     cto_takeaway_ai_items: int = 3
+
+
+class PromptConfig(BaseModel):
+    """Optional prompt overrides for one topic.
+
+    Leave any field empty to use the built-in prompt for that step. User
+    prompts are Python ``str.format`` templates and must keep the placeholders
+    used by their corresponding built-in prompt.
+    """
+
+    analysis_system: Optional[str] = None
+    analysis_user: Optional[str] = None
+    concept_system: Optional[str] = None
+    concept_user: Optional[str] = None
+    enrichment_system: Optional[str] = None
+    enrichment_user: Optional[str] = None
+    takeaway_system: Optional[str] = None
+    takeaway_user: Optional[str] = None
+    topic_dedup_system: Optional[str] = None
+    topic_dedup_user: Optional[str] = None
+    translation_system: Optional[str] = None
+    translation_user: Optional[str] = None
+
+
+class TopicConfig(BaseModel):
+    """One configurable briefing topic/theme.
+
+    Topics are peer briefing products. Each topic should define its own source,
+    filtering, and summary settings while sharing global AI, email, webhook,
+    scheduler, and artifact configuration.
+    """
+
+    slug: str
+    name: str
+    enabled: bool = True
+    title_en: Optional[str] = None
+    title_zh: Optional[str] = None
+    description: str = ""
+    audience: str = ""
+    relevance_prompt: str = ""
+    cto_prompt_focus: str = ""
+    prompts: PromptConfig = Field(default_factory=PromptConfig)
+    sources: Optional[SourcesConfig] = None
+    filtering: Optional[FilteringConfig] = None
+    summary: Optional[SummaryConfig] = None
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("topic.slug is required")
+        allowed = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
+        if any(ch not in allowed for ch in normalized):
+            raise ValueError("topic.slug may only contain lowercase letters, numbers, hyphen, and underscore")
+        return normalized
 
 
 class ArtifactConfig(BaseModel):
@@ -389,6 +469,7 @@ class WeChatPublishingConfig(BaseModel):
     """WeChat Official Account publishing configuration."""
 
     enabled: bool = False
+    auto_create_draft_on_run: bool = True
     appid_env: str = "WECHAT_APP_ID"
     secret_env: str = "WECHAT_APP_SECRET"
     author: str = "AI CTO Daily"
@@ -419,6 +500,8 @@ class Config(BaseModel):
     """Main configuration model."""
 
     version: str = "1.0"
+    active_topic: str = "ai-cto"
+    topics: List[TopicConfig] = Field(default_factory=list)
     ai: AIConfig
     sources: SourcesConfig
     filtering: FilteringConfig
@@ -428,3 +511,56 @@ class Config(BaseModel):
     publishing: PublishingConfig = Field(default_factory=PublishingConfig)
     email: Optional[EmailConfig] = None
     webhook: Optional[WebhookConfig] = None
+
+    @model_validator(mode="after")
+    def validate_active_topic(self) -> "Config":
+        if self.topics:
+            enabled_slugs = {topic.slug for topic in self.topics if topic.enabled}
+            all_slugs = {topic.slug for topic in self.topics}
+            if self.active_topic not in all_slugs:
+                raise ValueError(f"active_topic '{self.active_topic}' was not found in topics")
+            if self.active_topic not in enabled_slugs:
+                raise ValueError(f"active_topic '{self.active_topic}' is disabled")
+        return self
+
+    def get_active_topic(self) -> TopicConfig:
+        """Return the active topic, falling back to the legacy AI CTO topic."""
+        for topic in self.topics:
+            if topic.slug == self.active_topic:
+                return topic
+        return TopicConfig(
+            slug="ai-cto",
+            name="AI CTO",
+            title_en="AI CTO Daily",
+            title_zh="AI CTO 日报",
+            description="AI technology briefing for CTOs and engineering leaders.",
+            audience="CTOs, VP Engineering, platform leaders, and senior AI practitioners.",
+            relevance_prompt=(
+                "This radar is AI-focused. Score 7+ only when the item is directly about AI/ML, "
+                "LLMs, AI agents, model releases, AI infrastructure, AI inference/serving, "
+                "AI developer tools, AI safety/security, AI product/platform changes, or "
+                "technical research that directly advances or evaluates AI systems."
+            ),
+            cto_prompt_focus=(
+                "Focus on enterprise technology strategy, architecture, engineering productivity, "
+                "platform reliability, AI infrastructure cost, security/compliance, vendor strategy, "
+                "team capability, and roadmap decisions."
+            ),
+        )
+
+    def scoped_to_active_topic(self) -> "Config":
+        """Return a config copy with the active topic's own settings applied.
+
+        Top-level sources/filtering/summary remain as a legacy fallback so
+        older single-topic configs continue to run.
+        """
+        topic = self.get_active_topic()
+        scoped = self.model_copy(deep=True)
+        if topic.sources is not None:
+            scoped.sources = topic.sources.model_copy(deep=True)
+        if topic.filtering is not None:
+            scoped.filtering = topic.filtering.model_copy(deep=True)
+        if topic.summary is not None:
+            scoped.summary = topic.summary.model_copy(deep=True)
+        scoped.active_topic = topic.slug
+        return scoped

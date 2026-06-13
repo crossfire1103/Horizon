@@ -5,7 +5,12 @@ import json
 import pytest
 
 from src.storage.manager import ConfigError
-from src.web.server import _render_markdown, _validate_config_text
+from src.web.server import (
+    INDEX_HTML,
+    _fill_default_prompts_for_editor,
+    _render_markdown,
+    _validate_config_text,
+)
 from src.publishers.wechat_renderer import append_full_version_note, markdown_to_wechat_html
 
 
@@ -25,6 +30,26 @@ def test_validate_config_text_accepts_wechat_publish_mode():
     config = _validate_config_text(json.dumps(data))
 
     assert config.publishing.wechat.publish_mode == "publish"
+
+
+def test_config_editor_expands_default_topic_prompts():
+    with open("data/config.example.json", "r", encoding="utf-8") as f:
+        data = json.loads(f.read())
+
+    for topic in data["topics"]:
+        topic["prompts"]["analysis_system"] = None
+        topic["prompts"]["analysis_user"] = None
+
+    expanded = _fill_default_prompts_for_editor(data)
+    gaming = next(topic for topic in expanded["topics"] if topic["slug"] == "gaming")
+
+    assert "Gaming Radar" in gaming["prompts"]["analysis_system"]
+    assert "{title}" in gaming["prompts"]["analysis_user"]
+
+
+def test_config_editor_has_array_add_action():
+    assert "Add item" in INDEX_HTML
+    assert "addConfigArrayItem" in INDEX_HTML
 
 
 def test_validate_config_text_rejects_invalid_json():

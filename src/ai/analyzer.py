@@ -9,9 +9,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCompleteColumn
 
 from .client import AIClient
-from .prompts import CONTENT_ANALYSIS_SYSTEM, CONTENT_ANALYSIS_USER
+from .prompts import CONTENT_ANALYSIS_USER, build_content_analysis_system, get_prompt
 from .utils import detect_original_language, parse_json_response
-from ..models import ContentItem
+from ..models import ContentItem, TopicConfig
 from ..storage.artifacts import ai_trace_context
 
 DEFAULT_THROTTLE_SEC = 0.0
@@ -20,8 +20,9 @@ DEFAULT_THROTTLE_SEC = 0.0
 class ContentAnalyzer:
     """Analyzes content items using AI to determine importance."""
 
-    def __init__(self, ai_client: AIClient):
+    def __init__(self, ai_client: AIClient, topic: TopicConfig | None = None):
         self.client = ai_client
+        self.topic = topic
 
     @staticmethod
     def _parse_json_response(response: str) -> Optional[dict]:
@@ -146,12 +147,23 @@ class ContentAnalyzer:
 
         discussion_section = "\n".join(discussion_parts) if discussion_parts else ""
 
+        source_parts = [item.source_type.value]
+        if meta.get("feed_name"):
+            source_parts.append(f"feed={meta['feed_name']}")
+        if meta.get("category"):
+            source_parts.append(f"category={meta['category']}")
+        if meta.get("subreddit"):
+            source_parts.append(f"subreddit=r/{meta['subreddit']}")
+        source_label = " | ".join(source_parts)
+
         # Generate user prompt
-        user_prompt = CONTENT_ANALYSIS_USER.format(
+        user_template = get_prompt(self.topic, "analysis_user", CONTENT_ANALYSIS_USER)
+        user_prompt = user_template.format(
             title=item.title,
-            source=f"{item.source_type.value}",
+            source=source_label,
             author=item.author or "Unknown",
             url=str(item.url),
+            published_at=item.published_at.isoformat(),
             original_language=item.metadata.get("original_language", "unknown"),
             content_section=content_section,
             discussion_section=discussion_section
@@ -160,7 +172,7 @@ class ContentAnalyzer:
         # Get AI completion
         with ai_trace_context(stage="analyze", item_id=item.id, item_title=item.title):
             response = await self.client.complete(
-                system=CONTENT_ANALYSIS_SYSTEM,
+                system=build_content_analysis_system(self.topic),
                 user=user_prompt,
             )
 

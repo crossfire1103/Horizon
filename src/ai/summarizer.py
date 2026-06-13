@@ -3,7 +3,7 @@
 import re
 from typing import List, Optional
 
-from ..models import ContentItem, SummaryConfig
+from ..models import ContentItem, SummaryConfig, TopicConfig
 
 
 _CJK = r"[\u4e00-\u9fff\u3400-\u4dbf]"
@@ -89,8 +89,13 @@ LABELS["zh"].update(
 class DailySummarizer:
     """Generates daily Markdown summaries from pre-analyzed content items."""
 
-    def __init__(self, config: Optional[SummaryConfig] = None):
+    def __init__(
+        self,
+        config: Optional[SummaryConfig] = None,
+        topic: Optional[TopicConfig] = None,
+    ):
         self.config = config or SummaryConfig()
+        self.topic = topic
 
     async def generate_summary(
         self,
@@ -113,13 +118,14 @@ class DailySummarizer:
             str: Markdown formatted summary
         """
         if self.config.include_bilingual:
+            primary_language = self.config.bilingual_primary_language or language
             secondary = self.config.bilingual_secondary_language
-            if secondary and secondary != language:
+            if secondary and secondary != primary_language:
                 primary = self._generate_summary_single(
                     items,
                     date,
                     total_fetched,
-                    language=language,
+                    language=primary_language,
                     bilingual_note=True,
                 )
                 secondary_summary = self._generate_summary_single(
@@ -147,7 +153,7 @@ class DailySummarizer:
         language: str = "en",
         bilingual_note: bool = False,
     ) -> str:
-        labels = LABELS.get(language, LABELS["en"])
+        labels = self._labels(language)
 
         if not items:
             return self._generate_empty_summary(date, total_fetched, labels)
@@ -199,7 +205,7 @@ class DailySummarizer:
         language: str = "en",
     ) -> str:
         """Generate a compact overview for multi-message webhook delivery."""
-        labels = LABELS.get(language, LABELS["en"])
+        labels = self._labels(language)
         if not items:
             return self._generate_empty_summary(date, total_fetched, labels)
 
@@ -234,9 +240,20 @@ class DailySummarizer:
         total: int,
     ) -> str:
         """Generate one item message for multi-message webhook delivery."""
-        labels = LABELS.get(language, LABELS["en"])
+        labels = self._labels(language)
         prefix = f"第 {index}/{total} 条\n\n" if language == "zh" else f"Item {index}/{total}\n\n"
         return prefix + self._format_item(item, labels, language, index).rstrip("-\n ")
+
+    def _labels(self, language: str) -> dict:
+        labels = dict(LABELS.get(language, LABELS["en"]))
+        if self.topic:
+            if language == "zh":
+                labels["header"] = self.topic.title_zh or self.topic.title_en or self.topic.name
+            else:
+                labels["header"] = self.topic.title_en or self.topic.title_zh or self.topic.name
+            if self.topic.slug == "gaming":
+                labels["cto_takeaway"] = "亮点速递" if language == "zh" else "Highlights"
+        return labels
 
     def _format_item(
         self,

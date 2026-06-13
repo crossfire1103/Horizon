@@ -20,7 +20,7 @@ Respond with valid JSON only:
 
 If there are no duplicates at all, return: {{"duplicates": []}}"""
 
-CONTENT_ANALYSIS_SYSTEM = """You are an expert content curator helping filter important technical and academic information.
+CONTENT_ANALYSIS_BASE_SYSTEM = """You are an expert content curator helping filter important technical and academic information.
 
 Score content on a 0-10 scale based on importance and relevance:
 
@@ -58,8 +58,12 @@ Consider:
 - Community discussion quality: insightful comments, diverse viewpoints, and debates increase value
 - Engagement signals: high upvotes/favorites with substantive discussion indicate community-validated importance
 
-Topic guardrails:
-- This radar is AI-focused. Score 7+ only when the item is directly about AI/ML,
+Topic:
+{topic_block}
+"""
+
+
+DEFAULT_AI_CTO_TOPIC_GUARDRAILS = """- This radar is AI-focused. Score 7+ only when the item is directly about AI/ML,
   LLMs, AI agents, model releases, AI infrastructure, AI inference/serving,
   AI developer tools, AI safety/security, AI product/platform changes, or
   technical research that directly advances or evaluates AI systems.
@@ -76,8 +80,52 @@ Topic guardrails:
 - General popularity alone is not enough for a score above 6.
 - For a score of 7 or higher, the item must provide concrete AI-specific value:
   a meaningful AI development, AI systems insight, AI infrastructure result,
-  model/tool release, or high-signal practitioner/research finding.
-"""
+  model/tool release, or high-signal practitioner/research finding."""
+
+
+def _prompt_override(topic, field: str) -> str | None:
+    prompts = getattr(topic, "prompts", None)
+    value = getattr(prompts, field, None) if prompts else None
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def get_prompt(topic, field: str, default: str) -> str:
+    """Return a topic prompt override or the built-in default."""
+    return _prompt_override(topic, field) or default
+
+
+def build_content_analysis_system(topic=None) -> str:
+    """Build the scoring prompt for the active briefing topic."""
+    override = _prompt_override(topic, "analysis_system")
+    if override:
+        return override
+    if topic is None:
+        topic_block = DEFAULT_AI_CTO_TOPIC_GUARDRAILS
+    else:
+        parts = [
+            f"- Topic name: {getattr(topic, 'name', '') or getattr(topic, 'slug', '')}",
+        ]
+        if getattr(topic, "description", ""):
+            parts.append(f"- Description: {topic.description}")
+        if getattr(topic, "audience", ""):
+            parts.append(f"- Target audience: {topic.audience}")
+        if getattr(topic, "relevance_prompt", ""):
+            parts.append(f"- Relevance guardrails: {topic.relevance_prompt}")
+        else:
+            parts.append(f"- Relevance guardrails: {DEFAULT_AI_CTO_TOPIC_GUARDRAILS}")
+        parts.append(
+            "- If an item is outside this topic, cap its score at 4 even if it is popular or technically impressive."
+        )
+        parts.append(
+            "- For a score of 7 or higher, the item must provide concrete value for this topic and target audience."
+        )
+        topic_block = "\n".join(parts)
+    return CONTENT_ANALYSIS_BASE_SYSTEM.format(topic_block=topic_block)
+
+
+CONTENT_ANALYSIS_SYSTEM = build_content_analysis_system()
 
 CONTENT_ANALYSIS_USER = """Analyze the following content and provide a JSON response with:
 - score (0-10): Importance score
@@ -101,6 +149,15 @@ Respond with valid JSON only:
   "summary": "<one-sentence-summary in the original language when possible>",
   "tags": ["<tag1>", "<tag2>", ...]
 }}"""
+
+
+TRANSLATION_FALLBACK_SYSTEM = """You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text."""
+
+TRANSLATION_FALLBACK_USER = """Title: {title}
+Summary: {summary}
+
+Return JSON:
+{{"title_zh": "<Chinese title>", "summary_zh": "<1-2 sentence Chinese summary>"}}"""
 
 CONCEPT_EXTRACTION_SYSTEM = """You identify technical concepts in news that a reader might not know.
 Given a news item, return 1-3 search queries for concepts that need explanation.
@@ -228,6 +285,9 @@ Rules:
 
 
 CTO_TAKEAWAY_USER = """Generate a CTO-oriented takeaway for this selected news item.
+
+Active briefing topic:
+{topic_context}
 
 Title: {title}
 URL: {url}

@@ -10,9 +10,19 @@ from rich.console import Console
 
 from .storage.manager import ConfigError, StorageManager
 from .orchestrator import AICTODailyOrchestrator
+from .models import Config
 
 
 console = Console()
+
+
+def _config_with_topic(config: Config, topic_slug: str) -> Config:
+    topic_slug = topic_slug.strip().lower()
+    if topic_slug != "ai-cto" and not any(topic.slug == topic_slug for topic in config.topics):
+        raise ValueError(f"Unknown topic: {topic_slug}")
+    data = config.model_dump(mode="json")
+    data["active_topic"] = topic_slug
+    return Config.model_validate(data)
 
 
 def print_banner():
@@ -30,6 +40,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="AI CTO Daily briefing pipeline")
     parser.add_argument("--hours", type=int, help="Force fetch from last N hours")
+    parser.add_argument("--topic", help="Run a configured topic slug instead of active_topic")
     args = parser.parse_args()
 
     try:
@@ -64,6 +75,13 @@ def main():
         except Exception as e:
             console.print(f"[bold red]❌ Error loading configuration: {e}[/bold red]")
             sys.exit(1)
+
+        if args.topic:
+            try:
+                config = _config_with_topic(config, args.topic)
+            except ValueError as e:
+                console.print(f"[bold red]{e}[/bold red]")
+                sys.exit(1)
 
         # Create and run orchestrator
         orchestrator = AICTODailyOrchestrator(config, storage)

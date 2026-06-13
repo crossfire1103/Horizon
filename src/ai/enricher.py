@@ -20,17 +20,20 @@ from .prompts import (
     CONCEPT_EXTRACTION_SYSTEM, CONCEPT_EXTRACTION_USER,
     CONTENT_ENRICHMENT_SYSTEM, CONTENT_ENRICHMENT_USER,
     CTO_TAKEAWAY_SYSTEM, CTO_TAKEAWAY_USER,
+    TRANSLATION_FALLBACK_SYSTEM, TRANSLATION_FALLBACK_USER,
+    get_prompt,
 )
 from .utils import parse_json_response
-from ..models import ContentItem
+from ..models import ContentItem, TopicConfig
 from ..storage.artifacts import ai_trace_context
 
 
 class ContentEnricher:
     """Enriches high-scoring content items with background knowledge."""
 
-    def __init__(self, ai_client: AIClient):
+    def __init__(self, ai_client: AIClient, topic: TopicConfig | None = None):
         self.client = ai_client
+        self.topic = topic
 
     def _get_concurrency(self) -> int:
         """Return the configured enrichment concurrency, clamped to 1 or above."""
@@ -90,7 +93,21 @@ class ContentEnricher:
             "discussion_en": item.metadata.get("community_discussion_en") or "",
             "discussion_zh": item.metadata.get("community_discussion_zh") or "",
         }
-        user_prompt = CTO_TAKEAWAY_USER.format(
+        topic_context = "AI CTO"
+        if self.topic:
+            topic_context = "\n".join(
+                part
+                for part in [
+                    f"Name: {self.topic.name}",
+                    f"Audience: {self.topic.audience}" if self.topic.audience else "",
+                    f"Description: {self.topic.description}" if self.topic.description else "",
+                    f"Decision focus: {self.topic.cto_prompt_focus}" if self.topic.cto_prompt_focus else "",
+                ]
+                if part
+            )
+        user_template = get_prompt(self.topic, "takeaway_user", CTO_TAKEAWAY_USER)
+        user_prompt = user_template.format(
+            topic_context=topic_context,
             title=item.title,
             url=str(item.url),
             source=item.source_type.value,
@@ -100,7 +117,7 @@ class ContentEnricher:
         )
         with ai_trace_context(stage="cto_takeaway", item_id=item.id, item_title=item.title):
             response = await self.client.complete(
-                system=CTO_TAKEAWAY_SYSTEM,
+                system=get_prompt(self.topic, "takeaway_system", CTO_TAKEAWAY_SYSTEM),
                 user=user_prompt,
             )
         result = self._parse_json_response(response)
@@ -153,7 +170,8 @@ class ContentEnricher:
         Returns:
             List of search queries for concepts that need explanation
         """
-        user_prompt = CONCEPT_EXTRACTION_USER.format(
+        user_template = get_prompt(self.topic, "concept_user", CONCEPT_EXTRACTION_USER)
+        user_prompt = user_template.format(
             title=item.title,
             summary=item.ai_summary or item.title,
             tags=", ".join(item.ai_tags) if item.ai_tags else "",
@@ -163,7 +181,7 @@ class ContentEnricher:
         try:
             with ai_trace_context(stage="concept_extraction", item_id=item.id, item_title=item.title):
                 response = await self.client.complete(
-                    system=CONCEPT_EXTRACTION_SYSTEM,
+                    system=get_prompt(self.topic, "concept_system", CONCEPT_EXTRACTION_SYSTEM),
                     user=user_prompt,
                 )
             result = self._parse_json_response(response)
@@ -218,7 +236,8 @@ class ContentEnricher:
         available_urls = {r["url"]: r["title"] for r in all_results if r.get("url")}
 
         # Step 3: AI generates background grounded in search results
-        user_prompt = CONTENT_ENRICHMENT_USER.format(
+        user_template = get_prompt(self.topic, "enrichment_user", CONTENT_ENRICHMENT_USER)
+        user_prompt = user_template.format(
             title=item.title,
             url=str(item.url),
             original_language=item.metadata.get("original_language", "unknown"),
@@ -233,7 +252,7 @@ class ContentEnricher:
 
         with ai_trace_context(stage="enrich", item_id=item.id, item_title=item.title):
             response = await self.client.complete(
-                system=CONTENT_ENRICHMENT_SYSTEM,
+                system=get_prompt(self.topic, "enrichment_system", CONTENT_ENRICHMENT_SYSTEM),
                 user=user_prompt,
             )
 
@@ -287,14 +306,13 @@ class ContentEnricher:
         """Lightweight translation fallback: when full enrichment fails, at least
         translate the title and summary to Chinese so the item is not dropped."""
         try:
+            user_template = get_prompt(self.topic, "translation_user", TRANSLATION_FALLBACK_USER)
             with ai_trace_context(stage="translation_fallback", item_id=item.id, item_title=item.title):
                 response = await self.client.complete(
-                    system="You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text.",
-                    user=(
-                        f'Title: {item.title}\n'
-                        f'Summary: {item.ai_summary or item.title}\n\n'
-                        'Return JSON:\n'
-                        '{"title_zh": "<中文标题>", "summary_zh": "<用中文写1-2句摘要>"}'
+                    system=get_prompt(self.topic, "translation_system", TRANSLATION_FALLBACK_SYSTEM),
+                    user=user_template.format(
+                        title=item.title,
+                        summary=item.ai_summary or item.title,
                     ),
                 )
             result = self._parse_json_response(response)

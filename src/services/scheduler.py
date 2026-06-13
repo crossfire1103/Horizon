@@ -243,7 +243,7 @@ class PipelineScheduler:
             return None
 
 
-def start_blocking_cli_job(hours: int | None) -> dict[str, Any]:
+def start_blocking_cli_job(hours: int | None, topic_slug: str | None = None) -> dict[str, Any]:
     """Run the normal CLI pipeline and block until it exits."""
     SCHEDULER_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     job_id = f"scheduled-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid4().hex[:8]}"
@@ -254,6 +254,8 @@ def start_blocking_cli_job(hours: int | None) -> dict[str, Any]:
     command = [sys.executable, "-m", "src.main"]
     if hours:
         command.extend(["--hours", str(hours)])
+    if topic_slug:
+        command.extend(["--topic", topic_slug])
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log_handle:
         process = subprocess.run(
