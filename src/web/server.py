@@ -603,6 +603,17 @@ INDEX_HTML = r"""<!doctype html>
     .muted { color:var(--muted); }
     .ok { color:var(--ok); font-weight:650; }
     .bad { color:var(--bad); font-weight:650; }
+    .status-card { border:1px solid var(--line); border-radius:8px; padding:14px; background:#fff; }
+    .status-card.running { border-color:#86efac; background:#f0fdf4; }
+    .status-card.stopped { border-color:#fecaca; background:#fef2f2; }
+    .status-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+    .status-title { font-size:18px; font-weight:750; }
+    .status-dot { width:12px; height:12px; border-radius:999px; background:#94a3b8; box-shadow:0 0 0 4px rgba(148,163,184,.16); }
+    .status-card.running .status-dot { background:var(--ok); box-shadow:0 0 0 4px rgba(15,123,69,.16); }
+    .status-card.stopped .status-dot { background:var(--bad); box-shadow:0 0 0 4px rgba(180,35,24,.16); }
+    .kv { display:grid; grid-template-columns:120px 1fr; gap:6px 10px; margin-top:8px; }
+    .kv div:nth-child(odd) { color:var(--muted); }
+    button:disabled { cursor:not-allowed; opacity:.52; }
     pre { margin:0; padding:12px; background:#0b1020; color:#dbeafe; border-radius:8px; overflow:auto; max-height:620px; white-space:pre-wrap; }
     .list { display:grid; gap:8px; }
     .item { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff; }
@@ -643,6 +654,7 @@ INDEX_HTML = r"""<!doctype html>
       <section id="dashboard" class="active">
         <div class="grid">
           <div class="panel"><h2>Runtime</h2><div id="runtime"></div></div>
+          <div class="panel"><h2>Scheduler</h2><div id="schedulerMini"></div></div>
           <div class="panel"><h2>Latest Jobs</h2><div id="jobsMini" class="list"></div></div>
           <div class="panel"><h2>Latest Summaries</h2><div id="summariesMini" class="list"></div></div>
         </div>
@@ -664,8 +676,8 @@ INDEX_HTML = r"""<!doctype html>
           <div id="scheduleStatus" class="list">Loading...</div>
           <div class="row" style="margin-top:12px">
             <div style="width:180px"><label>Run-now Hours</label><input id="scheduleRunHours" type="number" min="1" value="30" /></div>
-            <button class="primary" onclick="startScheduler()">Start Scheduler</button>
-            <button class="secondary" onclick="stopScheduler()">Stop Scheduler</button>
+            <button id="scheduleStartBtn" class="primary" onclick="startScheduler()">Start Scheduler</button>
+            <button id="scheduleStopBtn" class="secondary" onclick="stopScheduler()">Stop Scheduler</button>
             <button class="secondary" onclick="runScheduleNow()">Run Now</button>
           </div>
           <p class="muted">Edit the schedule block in Config, save it, then start the scheduler. The standalone service command is `uv run ai-cto-daily-scheduler`.</p>
@@ -759,7 +771,14 @@ INDEX_HTML = r"""<!doctype html>
     async function refreshAll() {
       const s = await api('/api/status');
       const v = s.validation;
-      $('statusBadge').innerHTML = v.ok ? '<span class="ok">Config OK</span>' : '<span class="bad">Needs attention</span>';
+      const scheduler = s.schedule || {};
+      const schedulerLabel = scheduler.service_running ? 'Scheduler running' : 'Scheduler stopped';
+      const schedulerClass = scheduler.service_running ? 'ok' : 'bad';
+      $('statusBadge').innerHTML = `
+        ${v.ok ? '<span class="ok">Config OK</span>' : '<span class="bad">Needs attention</span>'}
+        &nbsp;|&nbsp;
+        <span class="${schedulerClass}">${schedulerLabel}</span>
+      `;
       $('runtime').innerHTML = v.error ? `<p class="bad">${esc(v.error)}</p>` : `
         <div><b>${esc(v.ai.provider)}</b> · ${esc(v.ai.model)}</div>
         <div class="muted">Languages: ${esc((v.ai.languages||[]).join(', '))}</div>
@@ -768,13 +787,14 @@ INDEX_HTML = r"""<!doctype html>
         ${(v.missing_env||[]).map(x=>`<div class="bad">Missing env: ${esc(x)}</div>`).join('')}
         ${(v.warnings||[]).map(x=>`<div class="muted">${esc(x)}</div>`).join('')}
       `;
+      $('schedulerMini').innerHTML = scheduleStatusHtml(scheduler, true);
       renderJobs(s.jobs || []);
       renderMini('jobsMini', (s.jobs||[]).map(j => ({title:j.id, meta:`${j.status} · ${j.created_at}`})));
       renderMini('summariesMini', (s.summaries||[]).map(f => ({title:f.name, meta:f.modified_at})));
       renderSummaries(s.summaries || []);
       renderArtifacts(s.artifact_runs || []);
       renderWeChatSummaries(s.summaries || []);
-      renderSchedule(s.schedule || {});
+      renderSchedule(scheduler);
       refreshWeChatStatus();
     }
     function renderMini(id, items) {
@@ -797,19 +817,37 @@ INDEX_HTML = r"""<!doctype html>
     }
     async function selectJob(id) { selectedJob = id; await pollLog(); }
     function renderSchedule(s) {
+      $('scheduleStatus').innerHTML = scheduleStatusHtml(s, false);
+      $('scheduleStartBtn').disabled = !!s.service_running;
+      $('scheduleStopBtn').disabled = !s.service_running;
+    }
+    function scheduleStatusHtml(s, compact=false) {
       const cfg = s.config || {};
-      $('scheduleStatus').innerHTML = `
-        <div class="item">
-          <div class="item-title">${s.service_running ? 'Service running' : 'Service stopped'}</div>
-          <div class="${s.enabled ? 'ok' : 'muted'}">Config: ${s.enabled ? 'enabled' : 'disabled'}</div>
-          <div class="muted">Timezone: ${esc(cfg.timezone || '')}</div>
-          <div class="muted">Daily times: ${esc((cfg.daily_times || []).join(', '))}</div>
-          <div class="muted">Interval minutes: ${esc(cfg.interval_minutes ?? '')}</div>
-          <div class="muted">Pipeline hours: ${esc(cfg.hours ?? '')}</div>
-          <div class="muted">Next run: ${esc(s.next_run_at || 'not scheduled')}</div>
-          <div class="muted">Last job: ${esc(s.last_job_id || '')}</div>
-          <div class="muted">Last log: ${esc((s.last_job || {}).log_path || '')}</div>
-          ${s.last_error ? `<div class="bad">${esc(s.last_error)}</div>` : ''}
+      const running = !!s.service_running;
+      const enabled = !!s.enabled;
+      const title = running ? 'Scheduler is running' : 'Scheduler is stopped';
+      const nextRun = s.next_run_at || (enabled ? 'calculating...' : 'not scheduled');
+      const mode = enabled ? 'Config enabled' : 'Config disabled';
+      return `
+        <div class="status-card ${running ? 'running' : 'stopped'}">
+          <div class="status-head">
+            <div>
+              <div class="status-title">${title}</div>
+              <div class="${enabled ? 'ok' : 'muted'}">${mode}</div>
+            </div>
+            <span class="status-dot" aria-hidden="true"></span>
+          </div>
+          <div class="kv">
+            <div>Next run</div><div>${esc(nextRun)}</div>
+            <div>Timezone</div><div>${esc(cfg.timezone || '')}</div>
+            <div>Daily times</div><div>${esc((cfg.daily_times || []).join(', ') || 'none')}</div>
+            <div>Interval</div><div>${esc(cfg.interval_minutes ?? 'none')}</div>
+            <div>Pipeline hours</div><div>${esc(cfg.hours ?? '')}</div>
+            ${compact ? '' : `<div>Current job</div><div>${s.current_job_running ? '<span class="ok">running</span>' : 'idle'}</div>`}
+            <div>Last job</div><div>${esc(s.last_job_id || 'none')}</div>
+            ${compact ? '' : `<div>Last log</div><div>${esc((s.last_job || {}).log_path || 'none')}</div>`}
+          </div>
+          ${s.last_error ? `<div class="bad" style="margin-top:10px">${esc(s.last_error)}</div>` : ''}
         </div>
       `;
     }
