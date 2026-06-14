@@ -543,6 +543,22 @@
         "topic_dedup_user": "The following news items have already been sorted by importance score (descending). Identify which items are duplicates of each other.\n\n{items}\n\nReturn a JSON object listing only the groups that contain duplicates (2+ items). Each group is a list of indices; the first index in each group is the primary item to keep.\n\nRespond with valid JSON only:\n{{\n  \"duplicates\": [[<primary_idx>, <dup_idx>, ...], ...]\n}}\n\nIf there are no duplicates at all, return: {{\"duplicates\": []}}",
         "translation_system": "You are a translator. Translate to Simplified Chinese. Return only valid JSON, no other text.",
         "translation_user": "Title: {title}\nSummary: {summary}\n\nReturn JSON:\n{{\"title_zh\": \"<Chinese title>\", \"summary_zh\": \"<1-2 sentence Chinese summary>\"}}"
+      },
+      "publishing": {
+        "wechat": {
+          "enabled": true,
+          "appid_env": "WECHAT_APP_ID",
+          "secret_env": "WECHAT_APP_SECRET",
+          "author": "AI CTO Daily",
+          "cover_image": "assets/wechat-cover.png",
+          "default_digest": "今日 AI CTO 技术情报速递",
+          "publish_mode": "draft",
+          "review_reminder_enabled": false,
+          "review_reminder_recipients": [],
+          "review_reminder_subject": "AI CTO Daily is ready for WeChat review",
+          "review_url": "http://192.168.50.2:8765",
+          "auto_create_draft_on_run": true
+        }
       }
     },
     {
@@ -756,6 +772,22 @@
         "topic_dedup_user": "The following game-news items have already been sorted by importance score descending. Identify which items are duplicates of each other.\n\n{items}\n\nReturn a JSON object listing only the groups that contain duplicates (2+ items). Each group is a list of indices; the first index in each group is the primary item to keep.\n\nRespond with valid JSON only:\n{{\n  \"duplicates\": [[<primary_idx>, <dup_idx>, ...], ...]\n}}\n\nIf there are no duplicates at all, return: {{\"duplicates\": []}}",
         "translation_system": "You are a game-news translator. Translate to Simplified Chinese while preserving official game titles, studio names, platform names, abbreviations, and common English proper nouns when that is the natural industry usage. For Steam games, if an official Chinese title is provided in the title, summary, or metadata, use that exact title and do not retranslate it. Return only valid JSON, no other text.",
         "translation_user": "Title: {title}\nSummary: {summary}\n\nIf the text contains a Steam official Chinese name, use it exactly for title_zh.\n\nReturn JSON:\n{{\"title_zh\": \"<Chinese title, using official Chinese game title when available>\", \"summary_zh\": \"<1-2 sentence Chinese game-news summary>\"}}"
+      },
+      "publishing": {
+        "wechat": {
+          "enabled": true,
+          "appid_env": "WECHAT_APP_ID",
+          "secret_env": "WECHAT_APP_SECRET",
+          "author": "AI CTO Daily",
+          "cover_image": "assets/wechat-cover-gaming.png",
+          "default_digest": "今日 AI CTO 技术情报速递",
+          "publish_mode": "draft",
+          "review_reminder_enabled": false,
+          "review_reminder_recipients": [],
+          "review_reminder_subject": "AI CTO Daily is ready for WeChat review",
+          "review_url": "http://192.168.50.2:8765",
+          "auto_create_draft_on_run": true
+        }
       }
     }
   ]

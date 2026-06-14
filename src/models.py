@@ -342,7 +342,7 @@ class FilteringConfig(BaseModel):
 class SummaryConfig(BaseModel):
     """Markdown report rendering configuration."""
 
-    disclosure: str = "由 AI 生成，人类审核。"
+    disclosure: str = "\u7531 AI \u751f\u6210\uff0c\u4eba\u7c7b\u5ba1\u6838\u3002"
     include_summary: bool = False
     include_cto_takeaway: bool = False
     max_detailed_items: int = 0  # 0 means render every selected item in detail
@@ -399,6 +399,7 @@ class TopicConfig(BaseModel):
     sources: Optional[SourcesConfig] = None
     filtering: Optional[FilteringConfig] = None
     summary: Optional[SummaryConfig] = None
+    publishing: Optional["PublishingConfig"] = None
 
     @field_validator("slug")
     @classmethod
@@ -474,7 +475,7 @@ class WeChatPublishingConfig(BaseModel):
     secret_env: str = "WECHAT_APP_SECRET"
     author: str = "AI CTO Daily"
     cover_image: str = "assets/wechat-cover.png"
-    default_digest: str = "今日 AI CTO 技术情报速递"
+    default_digest: str = "\u4eca\u65e5 AI CTO \u6280\u672f\u60c5\u62a5\u901f\u9012"
     publish_mode: str = "draft"
     review_reminder_enabled: bool = False
     review_reminder_recipients: List[str] = Field(default_factory=list)
@@ -532,7 +533,7 @@ class Config(BaseModel):
             slug="ai-cto",
             name="AI CTO",
             title_en="AI CTO Daily",
-            title_zh="AI CTO 日报",
+            title_zh="AI CTO \u65e5\u62a5",
             description="AI technology briefing for CTOs and engineering leaders.",
             audience="CTOs, VP Engineering, platform leaders, and senior AI practitioners.",
             relevance_prompt=(
@@ -562,5 +563,22 @@ class Config(BaseModel):
             scoped.filtering = topic.filtering.model_copy(deep=True)
         if topic.summary is not None:
             scoped.summary = topic.summary.model_copy(deep=True)
+        if topic.publishing is not None:
+            scoped.publishing = self._merge_publishing_override(
+                scoped.publishing,
+                topic.publishing,
+            )
         scoped.active_topic = topic.slug
         return scoped
+
+    @staticmethod
+    def _merge_publishing_override(
+        base: PublishingConfig,
+        override: PublishingConfig,
+    ) -> PublishingConfig:
+        """Apply only topic-level publishing fields explicitly present in config."""
+        merged = base.model_copy(deep=True)
+        if "wechat" in override.model_fields_set:
+            for field in override.wechat.model_fields_set:
+                setattr(merged.wechat, field, getattr(override.wechat, field))
+        return merged

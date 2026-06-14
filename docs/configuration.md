@@ -618,6 +618,25 @@ For personal WeChat Official Accounts that cannot use the publish API, keep `pub
 - `review_reminder_recipients`: Explicit reminder recipients. If empty, AI CTO Daily sends the reminder to `email.email_address`.
 - `review_url`: Web console URL shown in the reminder email. For a Synology deployment, use the NAS address such as `http://192.168.50.2:8765`.
 
+Topic-level publishing settings can override the global publishing defaults. This is useful when each topic needs its own WeChat thumbnail:
+
+```json
+{
+  "topics": [
+    {
+      "slug": "gaming",
+      "publishing": {
+        "wechat": {
+          "cover_image": "assets/wechat-cover-gaming.png"
+        }
+      }
+    }
+  ]
+}
+```
+
+When a topic is selected in the Web UI, the Publish page uses that topic's scoped WeChat configuration.
+
 ## Webhook Notification
 
 Webhook notification is optional and disabled unless `webhook.enabled` is `true`. AI CTO Daily can call Feishu/Lark, DingTalk, Slack, Discord, or any custom webhook endpoint when the pipeline succeeds or fails.

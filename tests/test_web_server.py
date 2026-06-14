@@ -32,6 +32,27 @@ def test_validate_config_text_accepts_wechat_publish_mode():
     assert config.publishing.wechat.publish_mode == "publish"
 
 
+def test_topic_can_override_wechat_cover_image():
+    with open("data/config.example.json", "r", encoding="utf-8") as f:
+        data = json.loads(f.read())
+    data["publishing"]["wechat"]["enabled"] = True
+    data["publishing"]["wechat"]["appid_env"] = "GLOBAL_WECHAT_APP_ID"
+    gaming = next(topic for topic in data["topics"] if topic["slug"] == "gaming")
+    gaming["publishing"] = {
+        "wechat": {
+            "cover_image": "assets/wechat-cover-gaming.png",
+        }
+    }
+    data["active_topic"] = "gaming"
+
+    config = _validate_config_text(json.dumps(data))
+    scoped = config.scoped_to_active_topic()
+
+    assert scoped.publishing.wechat.cover_image == "assets/wechat-cover-gaming.png"
+    assert scoped.publishing.wechat.enabled is True
+    assert scoped.publishing.wechat.appid_env == "GLOBAL_WECHAT_APP_ID"
+
+
 def test_config_editor_expands_default_topic_prompts():
     with open("data/config.example.json", "r", encoding="utf-8") as f:
         data = json.loads(f.read())

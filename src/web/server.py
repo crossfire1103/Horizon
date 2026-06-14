@@ -949,6 +949,11 @@ INDEX_HTML = r"""<!doctype html>
       $('summaryPreview').textContent = 'Select a summary.';
       $('artifactPreview').textContent = 'Select a run artifact.';
       $('wechatMode').dataset.loaded = '';
+      $('wechatTitle').value = '';
+      $('wechatDigest').value = '';
+      $('wechatAuthor').value = '';
+      $('wechatCover').value = '';
+      $('wechatSourceUrl').value = '';
       await refreshAll();
     }
     function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
